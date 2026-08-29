@@ -1,10 +1,16 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { WaveAIModel } from "@/app/aipanel/waveai-model";
-import { getApi, getBlockComponentModel, getConnStatusAtom, globalStore, WOS } from "@/app/store/global";
+import {
+    getApi,
+    getBlockComponentModel,
+    getConnStatusAtom,
+    getFocusedBlockId,
+    globalStore,
+    WOS,
+} from "@/app/store/global";
+import { terminalAIRegistry } from "@/app/view/term/inlineai/terminal-ai-registry";
 import type { TermViewModel } from "@/app/view/term/term-model";
-import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { base64ToArrayBuffer } from "@/util/util";
 import { RpcResponseHelper, WshClient } from "./wshclient";
@@ -63,32 +69,25 @@ export class TabClient extends WshClient {
     }
 
     async handle_waveaiaddcontext(rh: RpcResponseHelper, data: CommandWaveAIAddContextData): Promise<void> {
-        const workspaceLayoutModel = WorkspaceLayoutModel.getInstance();
-        if (!workspaceLayoutModel.getAIPanelVisible()) {
-            workspaceLayoutModel.setAIPanelVisible(true, { nofocus: true });
-        }
-
-        const model = WaveAIModel.getInstance();
-
-        if (data.newchat) {
-            model.clearChat();
-        }
-
+        const files: File[] = [];
         if (data.files && data.files.length > 0) {
             for (const fileData of data.files) {
                 const decodedData = base64ToArrayBuffer(fileData.data64);
                 const blob = new Blob([decodedData], { type: fileData.type });
-                const file = new File([blob], fileData.name, { type: fileData.type });
-                await model.addFile(file);
+                files.push(new File([blob], fileData.name, { type: fileData.type }));
             }
         }
-
-        if (data.text) {
-            model.appendText(data.text);
-        }
-
-        if (data.submit) {
-            await model.handleSubmit();
+        const blockId = getFocusedBlockId();
+        if (
+            !blockId ||
+            !(await terminalAIRegistry.open(blockId, {
+                newChat: data.newchat,
+                text: data.text,
+                submit: data.submit,
+                files,
+            }))
+        ) {
+            throw new Error("No focused terminal is available for AI context");
         }
     }
 
@@ -159,7 +158,9 @@ export class TabClient extends WshClient {
                 if (bcm?.viewModel) {
                     const termViewModel = bcm.viewModel as TermViewModel;
                     if (termViewModel.termRef?.current?.shellIntegrationStatusAtom) {
-                        const shellIntegrationStatus = globalStore.get(termViewModel.termRef.current.shellIntegrationStatusAtom);
+                        const shellIntegrationStatus = globalStore.get(
+                            termViewModel.termRef.current.shellIntegrationStatusAtom
+                        );
                         result.termshellintegrationstatus = shellIntegrationStatus || "";
                     }
                     if (termViewModel.termRef?.current?.lastCommandAtom) {

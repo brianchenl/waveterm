@@ -1,0 +1,296 @@
+// Copyright 2026, Command Line Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+.inline-ai-tray {
+    display: flex;
+    flex: 0 1 min(44%, 28rem);
+    flex-direction: column;
+    min-height: 10rem;
+    max-height: min(52%, 34rem);
+    overflow: hidden;
+    color: var(--main-text-color);
+    background: var(--panel-bg-color);
+    border-top: 1px solid var(--border-color);
+    font-size: 12px;
+
+    button,
+    textarea {
+        font: inherit;
+    }
+
+    button {
+        color: inherit;
+    }
+
+    button:focus-visible,
+    textarea:focus-visible {
+        outline: 2px solid var(--accent-color);
+        outline-offset: 2px;
+    }
+}
+
+.inline-ai-tray-header,
+.inline-ai-context,
+.inline-ai-composer {
+    flex: none;
+}
+
+.inline-ai-tray-header {
+    display: flex;
+    min-height: 32px;
+    padding: 5px 8px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.inline-ai-mode-marker,
+.inline-ai-header-actions,
+.inline-ai-composer-actions {
+    display: flex;
+    align-items: center;
+}
+
+.inline-ai-mode-marker {
+    min-width: 0;
+    gap: 6px;
+
+    strong {
+        white-space: nowrap;
+        letter-spacing: 0.02em;
+    }
+}
+
+.inline-ai-mode-dot {
+    width: 7px;
+    height: 7px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--accent-color);
+    box-shadow: 0 0 0 3px rgb(from var(--accent-color) r g b / 18%);
+}
+
+.inline-ai-status {
+    overflow: hidden;
+    color: var(--secondary-text-color);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.inline-ai-header-actions {
+    gap: 4px;
+
+    button {
+        min-height: 24px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        background: transparent;
+
+        &:hover {
+            background: var(--highlight-bg-color);
+        }
+    }
+}
+
+.inline-ai-context-toggle {
+    padding: 2px 7px;
+    color: var(--secondary-text-color) !important;
+
+    &[aria-pressed="true"] {
+        color: var(--accent-color) !important;
+        border-color: rgb(from var(--accent-color) r g b / 45%);
+    }
+}
+
+.inline-ai-close {
+    width: 26px;
+    padding: 0;
+    font-size: 17px !important;
+    line-height: 1;
+}
+
+.inline-ai-context {
+    display: flex;
+    min-height: 28px;
+    padding: 5px 9px;
+    align-items: center;
+    gap: 7px;
+    overflow: hidden;
+    color: var(--secondary-text-color);
+    border-bottom: 1px solid var(--border-color);
+
+    span,
+    code {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    span:first-child {
+        color: var(--main-text-color);
+        font-weight: 600;
+    }
+
+    code {
+        font: var(--fixed-font);
+    }
+}
+
+.inline-ai-responses {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+}
+
+.inline-ai-response-toggle {
+    display: flex;
+    width: 100%;
+    min-height: 29px;
+    padding: 5px 9px;
+    flex: none;
+    cursor: pointer;
+    align-items: center;
+    gap: 6px;
+    text-align: left;
+    border: 0;
+    border-bottom: 1px solid var(--border-color);
+    background: transparent;
+
+    &:hover {
+        background: var(--highlight-bg-color);
+    }
+}
+
+.inline-ai-response-count {
+    min-width: 18px;
+    margin-left: auto;
+    padding: 0 5px;
+    color: var(--secondary-text-color);
+    text-align: center;
+    border-radius: 10px;
+    background: var(--highlight-bg-color);
+}
+
+.inline-ai-message-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 8px;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+.inline-ai-empty-response {
+    margin: 5px 2px;
+    color: var(--secondary-text-color);
+}
+
+.inline-ai-rendered-message {
+    & + & {
+        margin-top: 12px;
+    }
+}
+
+.inline-ai-fill-command {
+    min-height: 26px;
+    margin: 6px 0 0 8px;
+    padding: 2px 8px;
+    cursor: pointer;
+    color: var(--accent-color) !important;
+    border: 1px solid var(--accent-color);
+    border-radius: 4px;
+    background: transparent;
+
+    &:hover {
+        color: var(--button-text-color) !important;
+        background: var(--accent-color);
+    }
+}
+
+.inline-ai-composer {
+    padding: 7px 8px 6px;
+    border-top: 1px solid var(--border-color);
+
+    > label {
+        display: block;
+        margin: 0 0 4px 1px;
+        color: var(--secondary-text-color);
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    textarea {
+        display: block;
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 46px;
+        max-height: 9rem;
+        padding: 7px 9px;
+        resize: vertical;
+        color: var(--form-element-text-color);
+        border: 1px solid var(--form-element-border-color);
+        border-radius: 5px;
+        background: var(--form-element-bg-color);
+        font: var(--fixed-font);
+        line-height: 1.4;
+
+        &::placeholder {
+            color: var(--secondary-text-color);
+        }
+    }
+}
+
+.inline-ai-composer-footer {
+    display: flex;
+    min-height: 26px;
+    margin-top: 4px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+
+    > span {
+        overflow: hidden;
+        color: var(--secondary-text-color);
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+.inline-ai-composer-actions {
+    flex: none;
+    gap: 4px;
+
+    button {
+        min-height: 24px;
+        padding: 2px 9px;
+        cursor: pointer;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: transparent;
+
+        &[type="submit"] {
+            color: var(--button-text-color);
+            border-color: var(--accent-color);
+            background: var(--accent-color);
+        }
+
+        &:disabled {
+            cursor: default;
+            opacity: 0.45;
+        }
+    }
+}
+
+@media (max-height: 520px) {
+    .inline-ai-tray {
+        flex-basis: 58%;
+        max-height: 64%;
+    }
+
+    .inline-ai-context {
+        display: none;
+    }
+}

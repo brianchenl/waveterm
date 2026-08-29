@@ -12,9 +12,10 @@ interface AIPanelMessagesProps {
     messages: WaveUIMessage[];
     status: string;
     onContextMenu?: (e: React.MouseEvent) => void;
+    onInsertCode?: (code: string) => void;
 }
 
-export const AIPanelMessages = memo(({ messages, status, onContextMenu }: AIPanelMessagesProps) => {
+export const AIPanelMessages = memo(({ messages, status, onContextMenu, onInsertCode }: AIPanelMessagesProps) => {
     const model = WaveAIModel.getInstance();
     const isPanelOpen = useAtomValue(model.getPanelVisibleAtom());
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -82,6 +83,16 @@ export const AIPanelMessages = memo(({ messages, status, onContextMenu }: AIPane
         prevStatusRef.current = status;
     }, [status]);
 
+    const incompleteAssistantIndex =
+        status !== "ready" && messages.at(-1)?.role === "assistant" ? messages.length - 1 : -1;
+    let latestCompletedAssistantIndex = -1;
+    for (let index = messages.length - 1; index >= 0; index--) {
+        if (messages[index].role === "assistant" && index !== incompleteAssistantIndex) {
+            latestCompletedAssistantIndex = index;
+            break;
+        }
+    }
+
     return (
         <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-2 space-y-4" onContextMenu={onContextMenu}>
             <div className="mb-2">
@@ -90,7 +101,14 @@ export const AIPanelMessages = memo(({ messages, status, onContextMenu }: AIPane
             {messages.map((message, index) => {
                 const isLastMessage = index === messages.length - 1;
                 const isStreaming = status === "streaming" && isLastMessage && message.role === "assistant";
-                return <AIMessage key={message.id} message={message} isStreaming={isStreaming} />;
+                return (
+                    <AIMessage
+                        key={message.id}
+                        message={message}
+                        isStreaming={isStreaming}
+                        onInsertCode={index === latestCompletedAssistantIndex ? onInsertCode : undefined}
+                    />
+                );
             })}
 
             {status === "streaming" &&

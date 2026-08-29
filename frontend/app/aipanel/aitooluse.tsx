@@ -1,6 +1,7 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { useAIConversation } from "@/app/ai/conversation-host";
 import { BlockModel } from "@/app/block/block-model";
 import { tCurrent } from "@/app/i18n/current-i18n";
 import { recordTEvent } from "@/app/store/global";
@@ -147,6 +148,7 @@ interface AIToolUseBatchProps {
 
 const AIToolUseBatch = memo(({ parts, isStreaming }: AIToolUseBatchProps) => {
     const [userApprovalOverride, setUserApprovalOverride] = useState<string | null>(null);
+    const conversation = useAIConversation();
 
     const firstTool = parts[0].data;
     const baseApproval = userApprovalOverride || firstTool.approval;
@@ -154,15 +156,19 @@ const AIToolUseBatch = memo(({ parts, isStreaming }: AIToolUseBatchProps) => {
 
     const handleApprove = () => {
         setUserApprovalOverride("user-approved");
-        parts.forEach((part) => {
-            WaveAIModel.getInstance().toolUseSendApproval(part.data.toolcallid, "user-approved");
+        void conversation.act({
+            type: "approve-tools",
+            toolCallIds: parts.map((part) => part.data.toolcallid),
+            approval: "user-approved",
         });
     };
 
     const handleDeny = () => {
         setUserApprovalOverride("user-denied");
-        parts.forEach((part) => {
-            WaveAIModel.getInstance().toolUseSendApproval(part.data.toolcallid, "user-denied");
+        void conversation.act({
+            type: "approve-tools",
+            toolCallIds: parts.map((part) => part.data.toolcallid),
+            approval: "user-denied",
         });
     };
 
@@ -188,12 +194,28 @@ AIToolUseBatch.displayName = "AIToolUseBatch";
 interface AIToolUseProps {
     part: WaveUIMessagePart & { type: "data-tooluse" };
     isStreaming: boolean;
+    allowGlobalChatActions: boolean;
 }
 
-const AIToolUse = memo(({ part, isStreaming }: AIToolUseProps) => {
+export function clearAIToolUseHighlight(
+    highlightTimeoutRef: React.MutableRefObject<NodeJS.Timeout | null>,
+    highlightedBlockIdRef: React.MutableRefObject<string | null>
+) {
+    if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+        highlightTimeoutRef.current = null;
+    }
+    if (highlightedBlockIdRef.current !== null) {
+        BlockModel.getInstance().setBlockHighlight(null);
+        highlightedBlockIdRef.current = null;
+    }
+}
+
+const AIToolUse = memo(({ part, isStreaming, allowGlobalChatActions }: AIToolUseProps) => {
     const toolData = part.data;
     const [userApprovalOverride, setUserApprovalOverride] = useState<string | null>(null);
     const model = WaveAIModel.getInstance();
+    const conversation = useAIConversation();
     const restoreModalToolCallId = useAtomValue(model.restoreBackupModalToolCallId);
     const showRestoreModal = restoreModalToolCallId === toolData.toolcallid;
     const highlightTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -209,21 +231,17 @@ const AIToolUse = memo(({ part, isStreaming }: AIToolUseProps) => {
     const isFileWriteTool = toolData.toolname === "write_text_file" || toolData.toolname === "edit_text_file";
 
     useEffect(() => {
-        return () => {
-            if (highlightTimeoutRef.current) {
-                clearTimeout(highlightTimeoutRef.current);
-            }
-        };
+        return () => clearAIToolUseHighlight(highlightTimeoutRef, highlightedBlockIdRef);
     }, []);
 
     const handleApprove = () => {
         setUserApprovalOverride("user-approved");
-        WaveAIModel.getInstance().toolUseSendApproval(toolData.toolcallid, "user-approved");
+        void conversation.act({ type: "approve-tools", toolCallIds: [toolData.toolcallid], approval: "user-approved" });
     };
 
     const handleDeny = () => {
         setUserApprovalOverride("user-denied");
-        WaveAIModel.getInstance().toolUseSendApproval(toolData.toolcallid, "user-denied");
+        void conversation.act({ type: "approve-tools", toolCallIds: [toolData.toolcallid], approval: "user-denied" });
     };
 
     const handleMouseEnter = () => {
@@ -276,7 +294,8 @@ const AIToolUse = memo(({ part, isStreaming }: AIToolUseProps) => {
                 <span className="font-bold">{statusIcon}</span>
                 <div className="font-semibold">{toolData.toolname}</div>
                 <div className="flex-1" />
-                {isFileWriteTool &&
+                {allowGlobalChatActions &&
+                    isFileWriteTool &&
                     toolData.inputfilename &&
                     toolData.writebackupfilename &&
                     toolData.runts &&
@@ -293,7 +312,7 @@ const AIToolUse = memo(({ part, isStreaming }: AIToolUseProps) => {
                             <i className="fa fa-clock-rotate-left text-xs"></i>
                         </button>
                     )}
-                {isFileWriteTool && toolData.inputfilename && (
+                {allowGlobalChatActions && isFileWriteTool && toolData.inputfilename && (
                     <button
                         onClick={handleOpenDiff}
                         className="flex-shrink-0 px-1.5 py-0.5 border border-zinc-600 hover:border-zinc-500 hover:bg-zinc-700 rounded cursor-pointer transition-colors flex items-center gap-1 text-zinc-400"
@@ -313,7 +332,7 @@ const AIToolUse = memo(({ part, isStreaming }: AIToolUseProps) => {
                     <AIToolApprovalButtons count={1} onApprove={handleApprove} onDeny={handleDeny} />
                 </div>
             )}
-            {showRestoreModal && <RestoreBackupModal part={part} />}
+            {allowGlobalChatActions && showRestoreModal && <RestoreBackupModal part={part} />}
         </div>
     );
 });
@@ -345,6 +364,7 @@ AIToolProgress.displayName = "AIToolProgress";
 interface AIToolUseGroupProps {
     parts: Array<WaveUIMessagePart & { type: "data-tooluse" | "data-toolprogress" }>;
     isStreaming: boolean;
+    allowGlobalChatActions?: boolean;
 }
 
 type ToolGroupItem =
@@ -352,7 +372,7 @@ type ToolGroupItem =
     | { type: "single"; part: WaveUIMessagePart & { type: "data-tooluse" } }
     | { type: "progress"; part: WaveUIMessagePart & { type: "data-toolprogress" } };
 
-export const AIToolUseGroup = memo(({ parts, isStreaming }: AIToolUseGroupProps) => {
+export const AIToolUseGroup = memo(({ parts, isStreaming, allowGlobalChatActions = true }: AIToolUseGroupProps) => {
     const tooluseParts = parts.filter((p) => p.type === "data-tooluse") as Array<
         WaveUIMessagePart & { type: "data-tooluse" }
     >;
@@ -430,7 +450,11 @@ export const AIToolUseGroup = memo(({ parts, isStreaming }: AIToolUseGroupProps)
                 } else {
                     return (
                         <div key={idx} className="mt-2">
-                            <AIToolUse part={item.part} isStreaming={isStreaming} />
+                            <AIToolUse
+                                part={item.part}
+                                isStreaming={isStreaming}
+                                allowGlobalChatActions={allowGlobalChatActions}
+                            />
                         </div>
                     );
                 }

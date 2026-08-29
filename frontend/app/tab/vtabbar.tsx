@@ -1,15 +1,14 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { preloadAIPanel } from "@/app/aipanel/aipanel-loader";
 import { Tooltip } from "@/app/element/tooltip";
 import { useTranslation } from "@/app/i18n/use-i18n";
 import { getTabBadgeAtom } from "@/app/store/badge";
 import { getTabModelByTabId } from "@/app/store/tab-model";
 import { makeORef } from "@/app/store/wos";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
+import { terminalAIRegistry, toggleFocusedTerminalAI } from "@/app/view/term/inlineai/terminal-ai-registry";
 import { useWaveEnv } from "@/app/waveenv/waveenv";
-import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { validateCssColor } from "@/util/color-validator";
 import { cn, fireAndForget } from "@/util/util";
 import { useAtomValue } from "jotai";
@@ -24,12 +23,11 @@ export type { VTabItem } from "./vtab";
 const VTabBarAIButton = memo(() => {
     const { t } = useTranslation();
     const env = useWaveEnv<VTabBarEnv>();
-    const aiPanelOpen = useAtomValue(WorkspaceLayoutModel.getInstance().panelVisibleAtom);
+    const terminalAIOpen = useAtomValue(terminalAIRegistry.anyOpenAtom);
     const hideAiButton = useAtomValue(env.getSettingsKeyAtom("app:hideaibutton"));
 
     const onClick = () => {
-        const currentVisible = WorkspaceLayoutModel.getInstance().getAIPanelVisible();
-        WorkspaceLayoutModel.getInstance().setAIPanelVisible(!currentVisible);
+        toggleFocusedTerminalAI();
     };
 
     if (hideAiButton) {
@@ -38,13 +36,12 @@ const VTabBarAIButton = memo(() => {
 
     return (
         <Tooltip
-            content={t("Toggle Wave AI Panel")}
+            content={t("Toggle terminal AI mode")}
             placement="bottom"
             hideOnClick
-            divClassName={`flex h-[22px] px-3.5 justify-end mb-1 items-center rounded-md mr-1 box-border cursor-pointer bg-hover hover:bg-hoverbg transition-colors text-[12px] ${aiPanelOpen ? "text-accent" : "text-secondary"}`}
+            divClassName={`flex h-[22px] px-3.5 justify-end mb-1 items-center rounded-md mr-1 box-border cursor-pointer bg-hover hover:bg-hoverbg transition-colors text-[12px] ${terminalAIOpen ? "text-accent" : "text-secondary"}`}
             divStyle={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
             divOnClick={onClick}
-            divOnPointerEnter={() => void preloadAIPanel().catch((error) => console.error("AI preload failed", error))}
         >
             <i className="fa fa-sparkles" />
         </Tooltip>

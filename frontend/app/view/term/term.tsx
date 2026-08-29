@@ -21,6 +21,7 @@ import clsx from "clsx";
 import debug from "debug";
 import * as jotai from "jotai";
 import * as React from "react";
+import { TerminalAIControllerLoader } from "./inlineai/terminal-ai-controller-loader";
 import { TermLinkTooltip } from "./term-tooltip";
 import { TermStickers } from "./termsticker";
 import { TermThemeUpdater } from "./termtheme";
@@ -397,6 +398,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
                 <TermLinkTooltip termWrap={termWrapInst} />
             </NullErrorBoundary>
             <Search {...searchProps} />
+            {isBasicTerm && <TerminalAIControllerLoader blockId={blockId} model={model} />}
         </div>
     );
 };

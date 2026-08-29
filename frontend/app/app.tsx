@@ -10,10 +10,10 @@ import {
     getBlockBadgeAtom,
 } from "@/app/store/badge";
 import { ClientModel } from "@/app/store/client-model";
-import { FocusManager } from "@/app/store/focusManager";
 import { GlobalModel } from "@/app/store/global-model";
 import { globalStore } from "@/app/store/jotaiStore";
 import { getTabModelByTabId, TabModelContext } from "@/app/store/tab-model";
+import { terminalAIRegistry } from "@/app/view/term/inlineai/terminal-ai-registry";
 import { WaveEnvContext } from "@/app/waveenv/waveenv";
 import { makeWaveEnvImpl } from "@/app/waveenv/waveenvimpl";
 import { Workspace } from "@/app/workspace/workspace";
@@ -236,15 +236,15 @@ const MacOSFirstClickHandler = () => {
             }
             return null;
         };
-        const isAIPanelTarget = (target: EventTarget): boolean => {
+        const getTerminalAIBlockId = (target: EventTarget): string => {
             let elem = target as HTMLElement;
             while (elem != null) {
-                if (elem.dataset?.aipanel) {
-                    return true;
+                if (elem.dataset?.terminalAi) {
+                    return elem.dataset.blockId ?? null;
                 }
                 elem = elem.parentElement;
             }
-            return false;
+            return null;
         };
         const handleMouseDown = (e: MouseEvent) => {
             const timeDiff = Date.now() - windowFocusTime;
@@ -253,16 +253,14 @@ const MacOSFirstClickHandler = () => {
                 e.stopPropagation();
                 e.stopImmediatePropagation();
                 cancelNextClick = true;
+                const terminalAIBlockId = getTerminalAIBlockId(e.target);
                 const blockId = getBlockIdFromTarget(e.target);
-                if (blockId != null) {
+                if (terminalAIBlockId != null) {
+                    setTimeout(() => terminalAIRegistry.focus(terminalAIBlockId), 10);
+                } else if (blockId != null) {
                     setTimeout(() => {
                         console.log("macos first-click, focusing block", blockId);
                         refocusNode(blockId);
-                    }, 10);
-                } else if (isAIPanelTarget(e.target)) {
-                    setTimeout(() => {
-                        console.log("macos first-click, focusing AI panel");
-                        FocusManager.getInstance().setWaveAIFocused(true);
                     }, 10);
                 }
                 console.log("macos first-click detected, canceled", timeDiff + "ms");
