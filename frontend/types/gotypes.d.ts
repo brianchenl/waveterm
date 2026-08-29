@@ -23,6 +23,8 @@ declare global {
         "ai:apitype"?: string;
         "ai:model"?: string;
         "ai:thinkinglevel"?: string;
+        "ai:thinking"?: AIThinkingConfigType;
+        "ai:reasoningeffort"?: string;
         "ai:verbosity"?: string;
         "ai:endpoint"?: string;
         "ai:proxyurl"?: string;
@@ -40,6 +42,12 @@ declare global {
     // wconfig.AIModeConfigUpdate
     type AIModeConfigUpdate = {
         configs: {[key: string]: AIModeConfigType};
+    };
+
+    // wconfig.AIThinkingConfigType
+    type AIThinkingConfigType = {
+        type?: string;
+        keep?: string;
     };
 
     // wshrpc.ActivityDisplayType
@@ -224,6 +232,21 @@ declare global {
     type CloseTabRtnType = {
         closewindow?: boolean;
         newactivetabid?: string;
+    };
+
+    // wshrpc.CommandAIProviderTestData
+    type CommandAIProviderTestData = {
+        provider: string;
+        apitoken?: string;
+        proxyurl?: string;
+    };
+
+    // wshrpc.CommandAIProviderTestRtnData
+    type CommandAIProviderTestRtnData = {
+        success: boolean;
+        models?: string[];
+        latencyms: number;
+        error?: string;
     };
 
     // wshrpc.CommandAuthenticateJobManagerData
@@ -767,6 +790,29 @@ declare global {
         tabid: string;
         selector: string;
         opts?: WebSelectorOpts;
+    };
+
+    // wshrpc.CommandWindowsDiagnosticsData
+    type CommandWindowsDiagnosticsData = {
+        sshhost?: string;
+    };
+
+    // wshrpc.CommandWindowsDiagnosticsRtnData
+    type CommandWindowsDiagnosticsRtnData = {
+        platform: string;
+        sshconfigpath: string;
+        sshconfigexists: boolean;
+        sshconfigreadable: boolean;
+        sshconfigerror?: string;
+        sshconfighasmatch?: boolean;
+        sshhosts?: string[];
+        selectedsshhost?: SSHHostDiagnostics;
+        sshagentpath: string;
+        sshagentavailable: boolean;
+        sshagentkeycount: number;
+        sshagenterror?: string;
+        shells: WindowsShellInfo[];
+        currentlocalshellpath?: string;
     };
 
     // wshrpc.CommandWriteAppFileData
@@ -1367,6 +1413,16 @@ declare global {
         winsize?: WinSize;
     };
 
+    // wshrpc.SSHHostDiagnostics
+    type SSHHostDiagnostics = {
+        alias: string;
+        hostname?: string;
+        user?: string;
+        port?: string;
+        identityfiles?: string[];
+        proxyjump?: string[];
+    };
+
     // wshrpc.SecretMeta
     type SecretMeta = {
         desc: string;
@@ -1387,6 +1443,7 @@ declare global {
         "app:disablectrlshiftdisplay"?: boolean;
         "app:focusfollowscursor"?: string;
         "app:tabbar"?: string;
+        "app:language"?: string;
         "feature:waveappbuilder"?: boolean;
         "ai:*"?: boolean;
         "ai:preset"?: string;
@@ -1589,6 +1646,7 @@ declare global {
         "debug:panictype"?: string;
         "block:view"?: string;
         "block:controller"?: string;
+        "block:subblock"?: boolean;
         "ai:backendtype"?: string;
         "ai:local"?: boolean;
         "wsh:cmd"?: string;
@@ -2161,6 +2219,15 @@ declare global {
     type WinSize = {
         width: number;
         height: number;
+    };
+
+    // wshrpc.WindowsShellInfo
+    type WindowsShellInfo = {
+        id: string;
+        name: string;
+        path?: string;
+        available: boolean;
+        recommended?: boolean;
     };
 
     // waveobj.Workspace

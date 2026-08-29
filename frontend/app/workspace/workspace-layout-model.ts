@@ -1,7 +1,7 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { WaveAIModel } from "@/app/aipanel/waveai-model";
+import { cancelAIPanelFocusRequest, requestAIPanelFocus } from "@/app/aipanel/aipanel-focus";
 import { globalStore } from "@/app/store/jotaiStore";
 import { isBuilderWindow } from "@/app/store/windowtype";
 import * as WOS from "@/app/store/wos";
@@ -408,11 +408,14 @@ class WorkspaceLayoutModel {
         if (visible) {
             if (!opts?.nofocus) {
                 this.focusTimeoutRef = setTimeout(() => {
-                    WaveAIModel.getInstance().focusInput();
+                    if (this.aiPanelVisible) {
+                        requestAIPanelFocus();
+                    }
                     this.focusTimeoutRef = null;
                 }, 350);
             }
         } else {
+            cancelAIPanelFocusRequest();
             const layoutModel = getLayoutModelForStaticTab();
             const focusedNode = globalStore.get(layoutModel.focusedNode);
             if (focusedNode == null) {

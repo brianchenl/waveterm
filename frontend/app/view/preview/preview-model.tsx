@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { BlockNodeModel } from "@/app/block/blocktypes";
+import { lazyWithRetry } from "@/app/element/lazy-module";
+import { tCurrent } from "@/app/i18n/current-i18n";
 import { ContextMenuModel } from "@/app/store/contextmenu";
 import { globalStore } from "@/app/store/jotaiStore";
 import type { TabModel } from "@/app/store/tab-model";
@@ -18,17 +20,21 @@ import { Atom, atom, Getter, PrimitiveAtom, WritableAtom } from "jotai";
 import { loadable } from "jotai/utils";
 import type * as MonacoTypes from "monaco-editor";
 import { createRef } from "react";
-import { PreviewView } from "./preview";
 import { makeDirectoryDefaultMenuItems } from "./preview-directory-utils";
 import type { PreviewEnv } from "./previewenv";
 
+const PreviewView = lazyWithRetry(
+    () => import("./preview").then((module) => ({ default: module.PreviewView })),
+    "File preview"
+);
+
 // TODO drive this using config
-const BOOKMARKS: { label: string; path: string }[] = [
-    { label: "Home", path: "~" },
-    { label: "Desktop", path: "~/Desktop" },
-    { label: "Downloads", path: "~/Downloads" },
-    { label: "Documents", path: "~/Documents" },
-    { label: "Root", path: "/" },
+const BOOKMARKS: { labelKey: string; path: string }[] = [
+    { labelKey: "Home", path: "~" },
+    { labelKey: "Desktop", path: "~/Desktop" },
+    { labelKey: "Downloads", path: "~/Downloads" },
+    { labelKey: "Documents", path: "~/Documents" },
+    { labelKey: "Root", path: "/" },
 ];
 
 const MaxFileSize = 1024 * 1024 * 10; // 10MB
@@ -209,7 +215,10 @@ export class PreviewModel implements ViewModel {
                     icon: "folder-open",
                     longClick: (e: React.MouseEvent<any>) => {
                         const menuItems: ContextMenuItem[] = BOOKMARKS.map((bookmark) => ({
-                            label: `Go to ${bookmark.label} (${bookmark.path})`,
+                            label: tCurrent("Go to {{label}} ({{path}})", {
+                                label: tCurrent(bookmark.labelKey),
+                                path: bookmark.path,
+                            }),
                             click: () => this.goHistory(bookmark.path),
                         }));
                         ContextMenuModel.getInstance().showContextMenu(menuItems, e);
@@ -338,7 +347,7 @@ export class PreviewModel implements ViewModel {
                     {
                         elemtype: "iconbutton",
                         icon: showHiddenFiles ? "eye" : "eye-slash",
-                        title: showHiddenFiles ? "Hide Hidden Files" : "Show Hidden Files",
+                        title: tCurrent(showHiddenFiles ? "Hide Hidden Files" : "Show Hidden Files"),
                         click: () => {
                             globalStore.set(this.showHiddenFiles, (prev) => !prev);
                         },
@@ -354,13 +363,13 @@ export class PreviewModel implements ViewModel {
                     {
                         elemtype: "iconbutton",
                         icon: "book",
-                        title: "Table of Contents",
+                        title: tCurrent("Table of Contents"),
                         click: () => this.markdownShowTocToggle(),
                     },
                     {
                         elemtype: "iconbutton",
                         icon: "arrows-rotate",
-                        title: "Refresh",
+                        title: tCurrent("Refresh"),
                         click: () => this.refreshCallback?.(),
                     },
                 ] as IconButtonDecl[];
@@ -370,7 +379,7 @@ export class PreviewModel implements ViewModel {
                     {
                         elemtype: "iconbutton",
                         icon: "arrows-rotate",
-                        title: "Refresh",
+                        title: tCurrent("Refresh"),
                         click: () => this.refreshCallback?.(),
                     },
                 ] as IconButtonDecl[];
@@ -706,7 +715,7 @@ export class PreviewModel implements ViewModel {
         const overrideFontSize = blockData?.meta?.["editor:fontsize"];
         const menuItems: ContextMenuItem[] = [];
         menuItems.push({
-            label: "Copy Full Path",
+            label: tCurrent("Copy Full Path"),
             click: () =>
                 fireAndForget(async () => {
                     const filePath = await globalStore.get(this.statFilePath);
@@ -724,7 +733,7 @@ export class PreviewModel implements ViewModel {
                 }),
         });
         menuItems.push({
-            label: "Copy File Name",
+            label: tCurrent("Copy File Name"),
             click: () =>
                 fireAndForget(async () => {
                     const fileInfo = await globalStore.get(this.statFile);
@@ -758,7 +767,7 @@ export class PreviewModel implements ViewModel {
                 }
             );
             fontSizeSubMenu.unshift({
-                label: "Default (" + defaultFontSize + "px)",
+                label: tCurrent("Default ({{size}}px)", { size: defaultFontSize }),
                 type: "checkbox",
                 checked: overrideFontSize == null,
                 click: () => {
@@ -769,23 +778,23 @@ export class PreviewModel implements ViewModel {
                 },
             });
             menuItems.push({
-                label: "Editor Font Size",
+                label: tCurrent("Editor Font Size"),
                 submenu: fontSizeSubMenu,
             });
             if (globalStore.get(this.newFileContent) != null) {
                 menuItems.push({ type: "separator" });
                 menuItems.push({
-                    label: "Save File",
+                    label: tCurrent("Save File"),
                     click: () => fireAndForget(this.handleFileSave.bind(this)),
                 });
                 menuItems.push({
-                    label: "Revert File",
+                    label: tCurrent("Revert File"),
                     click: () => fireAndForget(this.handleFileRevert.bind(this)),
                 });
             }
             menuItems.push({ type: "separator" });
             menuItems.push({
-                label: "Word Wrap",
+                label: tCurrent("Word Wrap"),
                 type: "checkbox",
                 checked: wordWrap,
                 click: () =>
@@ -799,7 +808,7 @@ export class PreviewModel implements ViewModel {
         }
         if (loadableSV.state == "hasData" && loadableSV.data.specializedView == "directory") {
             menuItems.push({ type: "separator" });
-            menuItems.push({ label: "Default Settings", enabled: false });
+            menuItems.push({ label: tCurrent("Default Settings"), enabled: false });
             menuItems.push(...makeDirectoryDefaultMenuItems(this));
         }
         return menuItems;

@@ -1,6 +1,8 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { tCurrent } from "@/app/i18n/current-i18n";
+import { resolveLocale } from "@/app/i18n/i18n";
 import {
     clearBadgesForBlockOnFocus,
     clearBadgesForTabOnFocus,
@@ -17,7 +19,7 @@ import { makeWaveEnvImpl } from "@/app/waveenv/waveenvimpl";
 import { Workspace } from "@/app/workspace/workspace";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { ContextMenuModel } from "@/store/contextmenu";
-import { atoms, createBlock, getSettingsPrefixAtom, refocusNode } from "@/store/global";
+import { atoms, createBlock, getSettingsKeyAtom, getSettingsPrefixAtom, refocusNode } from "@/store/global";
 import { appHandleKeyDown, keyboardMouseDownHandler } from "@/store/keymodel";
 import { getElemAsStr } from "@/util/focusutil";
 import * as keyutil from "@/util/keyutil";
@@ -31,6 +33,7 @@ import { useEffect, useRef } from "react";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { AppBackground } from "./app-bg";
+import { ErrorBoundary } from "./element/errorboundary";
 import { CenteredDiv } from "./element/quickelems";
 
 import "./app.scss";
@@ -51,7 +54,9 @@ const App = ({ onFirstRender }: { onFirstRender: () => void }) => {
         <Provider store={globalStore}>
             <WaveEnvContext.Provider value={waveEnvRef.current}>
                 <TabModelContext.Provider value={getTabModelByTabId(tabId)}>
-                    <AppInner />
+                    <ErrorBoundary scopeName={tCurrent("Main window")}>
+                        <AppInner />
+                    </ErrorBoundary>
                 </TabModelContext.Provider>
             </WaveEnvContext.Provider>
         </Provider>
@@ -112,18 +117,18 @@ async function handleContextMenu(e: React.MouseEvent<HTMLDivElement>) {
     }
     const menu: ContextMenuItem[] = [];
     if (canCut) {
-        menu.push({ label: "Cut", role: "cut" });
+        menu.push({ label: tCurrent("Cut"), role: "cut" });
     }
     if (canCopy) {
-        menu.push({ label: "Copy", role: "copy" });
+        menu.push({ label: tCurrent("Copy"), role: "copy" });
     }
     if (canPaste) {
-        menu.push({ label: "Paste", role: "paste" });
+        menu.push({ label: tCurrent("Paste"), role: "paste" });
     }
     if (clipboardURL) {
         menu.push({ type: "separator" });
         menu.push({
-            label: "Open Clipboard URL (" + clipboardURL.hostname + ")",
+            label: tCurrent("Open Clipboard URL ({{host}})", { host: clipboardURL.hostname }),
             click: () => {
                 createBlock({
                     meta: {
@@ -140,6 +145,7 @@ async function handleContextMenu(e: React.MouseEvent<HTMLDivElement>) {
 function AppSettingsUpdater() {
     const windowSettingsAtom = getSettingsPrefixAtom("window");
     const windowSettings = useAtomValue(windowSettingsAtom);
+    const language = useAtomValue(getSettingsKeyAtom("app:language"));
     useEffect(() => {
         const isTransparentOrBlur =
             (windowSettings?.["window:transparent"] || windowSettings?.["window:blur"]) ?? false;
@@ -164,6 +170,11 @@ function AppSettingsUpdater() {
             document.body.style.removeProperty("--main-bg-color");
         }
     }, [windowSettings]);
+    useEffect(() => {
+        const locale = resolveLocale(language);
+        document.documentElement.lang = locale;
+        document.documentElement.dir = "ltr";
+    }, [language]);
     return null;
 }
 

@@ -6,11 +6,11 @@
 let net: Electron.Net;
 
 if (typeof window === "undefined") {
-    try {
-        import("electron").then(({ net: electronNet }) => (net = electronNet));
-    } catch (e) {
-        // do nothing
-    }
+    import("electron")
+        .then(({ net: electronNet }) => (net = electronNet))
+        .catch(() => {
+            // Electron is optional in tests and other non-renderer runtimes.
+        });
 }
 
 export function fetch(input: string | GlobalRequest | URL, init?: RequestInit): Promise<Response> {

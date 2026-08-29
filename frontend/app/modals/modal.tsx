@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Button } from "@/app/element/button";
+import { useTranslation } from "@/app/i18n/use-i18n";
 import { cn } from "@/util/util";
 import clsx from "clsx";
 import { forwardRef } from "react";
@@ -38,6 +39,7 @@ const Modal = forwardRef<HTMLDivElement, ModalProps>(
         }: ModalProps,
         ref
     ) => {
+        const { t } = useTranslation();
         const renderBackdrop = (onClick) => <div className="modal-backdrop" onClick={onClick}></div>;
 
         const renderFooter = () => {
@@ -48,7 +50,7 @@ const Modal = forwardRef<HTMLDivElement, ModalProps>(
             <div className="modal-wrapper">
                 {renderBackdrop(onClickBackdrop)}
                 <div ref={ref} className={clsx(`modal`, className)}>
-                    <Button className="grey ghost modal-close-btn" onClick={onClose} title="Close (ESC)">
+                    <Button className="grey ghost modal-close-btn" onClick={onClose} title={t("Close (ESC)")}>
                         <i className="fa-sharp fa-solid fa-xmark"></i>
                     </Button>
                     <div className="content-wrapper">

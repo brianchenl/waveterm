@@ -2,6 +2,7 @@ package streamclient
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -98,6 +99,42 @@ func TestBrokerBasicReadWrite(t *testing.T) {
 	_, err = reader.Read(buf)
 	if err != io.EOF {
 		t.Fatalf("Expected EOF, got %v", err)
+	}
+}
+
+func TestBrokerBoundsUnknownReaderTracking(t *testing.T) {
+	rpc := &mockRpcInterface{
+		dataChan: make(chan wshrpc.CommandStreamData, maxReaderErrorEntries+200),
+		ackChan:  make(chan wshrpc.CommandStreamAckData, maxReaderErrorEntries+200),
+	}
+	broker := NewBroker(rpc)
+	defer broker.Close()
+
+	for i := 0; i < maxReaderErrorEntries+100; i++ {
+		broker.processRecvData(wshrpc.CommandStreamData{Id: fmt.Sprintf("unknown-%d", i)})
+	}
+	broker.lock.Lock()
+	entryCount := len(broker.readerErrorSentTime)
+	broker.lock.Unlock()
+	if entryCount > maxReaderErrorEntries {
+		t.Fatalf("unknown reader tracking grew to %d entries, max %d", entryCount, maxReaderErrorEntries)
+	}
+}
+
+func TestBrokerClampsReadWindowInMetadata(t *testing.T) {
+	rpc := &mockRpcInterface{
+		dataChan: make(chan wshrpc.CommandStreamData, 1),
+		ackChan:  make(chan wshrpc.CommandStreamAckData, 1),
+	}
+	broker := NewBroker(rpc)
+	defer broker.Close()
+
+	reader, meta := broker.CreateStreamReader("reader", "writer", MaxStreamReadWindowBytes+1)
+	if reader.readWindow != MaxStreamReadWindowBytes {
+		t.Fatalf("reader window was not clamped: %d", reader.readWindow)
+	}
+	if meta.RWnd != reader.readWindow {
+		t.Fatalf("advertised window %d differs from enforced window %d", meta.RWnd, reader.readWindow)
 	}
 }
 

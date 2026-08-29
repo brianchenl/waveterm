@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { WaveStreamdown } from "@/app/element/streamdown";
+import { useTranslation } from "@/app/i18n/use-i18n";
 import { cn } from "@/util/util";
 import { memo, useEffect, useRef } from "react";
 import { getFileIcon } from "./ai-utils";
@@ -12,7 +13,7 @@ import { WaveAIModel } from "./waveai-model";
 
 const AIThinking = memo(
     ({
-        message = "AI is thinking...",
+        message,
         reasoningText,
         isWaitingApproval = false,
     }: {
@@ -20,6 +21,7 @@ const AIThinking = memo(
         reasoningText?: string;
         isWaitingApproval?: boolean;
     }) => {
+        const { t } = useTranslation();
         const scrollRef = useRef<HTMLDivElement>(null);
 
         useEffect(() => {
@@ -47,7 +49,7 @@ const AIThinking = memo(
                             <i className="fa fa-circle text-[10px]"></i>
                         </div>
                     )}
-                    {message && <span className="text-sm text-gray-400">{message}</span>}
+                    <span className="text-sm text-gray-400">{message ?? t("AI is thinking...")}</span>
                 </div>
                 <div ref={scrollRef} className="text-sm text-gray-500 overflow-y-auto h-[3lh] max-w-[600px] pl-9">
                     {displayText}
@@ -179,7 +181,8 @@ const groupMessageParts = (parts: WaveUIMessagePart[]): MessagePart[] => {
 const getThinkingMessage = (
     parts: WaveUIMessagePart[],
     isStreaming: boolean,
-    role: string
+    role: string,
+    t: (message: string) => string
 ): { message: string; reasoningText?: string; isWaitingApproval?: boolean } | null => {
     if (!isStreaming || role !== "assistant") {
         return null;
@@ -190,14 +193,14 @@ const getThinkingMessage = (
     );
 
     if (hasPendingApprovals) {
-        return { message: "Waiting for Tool Approvals...", isWaitingApproval: true };
+        return { message: t("Waiting for Tool Approvals..."), isWaitingApproval: true };
     }
 
     const lastPart = parts[parts.length - 1];
 
     if (lastPart?.type === "reasoning") {
         const reasoningContent = lastPart.text || "";
-        return { message: "AI is thinking...", reasoningText: reasoningContent };
+        return { message: t("AI is thinking..."), reasoningText: reasoningContent };
     }
 
     if (lastPart?.type === "text" && lastPart.text) {
@@ -208,13 +211,14 @@ const getThinkingMessage = (
 };
 
 export const AIMessage = memo(({ message, isStreaming }: AIMessageProps) => {
+    const { t } = useTranslation();
     const parts = message.parts || [];
     const displayParts = parts.filter(isDisplayPart);
     const fileParts = parts.filter(
         (part): part is WaveUIMessagePart & { type: "data-userfile" } => part.type === "data-userfile"
     );
 
-    const thinkingData = getThinkingMessage(parts, isStreaming, message.role);
+    const thinkingData = getThinkingMessage(parts, isStreaming, message.role, t);
     const groupedParts = groupMessageParts(displayParts);
 
     return (

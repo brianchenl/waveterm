@@ -30,6 +30,8 @@ const (
 	AIProvider_OpenRouter  = "openrouter"
 	AIProvider_NanoGPT     = "nanogpt"
 	AIProvider_OpenAI      = "openai"
+	AIProvider_DeepSeek    = "deepseek"
+	AIProvider_Kimi        = "kimi"
 	AIProvider_Azure       = "azure"
 	AIProvider_AzureLegacy = "azure-legacy"
 	AIProvider_Custom      = "custom"
@@ -153,9 +155,15 @@ func (td *ToolDefinition) HasRequiredCapabilities(capabilities []string) bool {
 // these are used internally to coordinate the calls/steps
 
 const (
-	ThinkingLevelLow    = "low"
-	ThinkingLevelMedium = "medium"
-	ThinkingLevelHigh   = "high"
+	ThinkingLevelLow     = "low"
+	ThinkingLevelMedium  = "medium"
+	ThinkingLevelHigh    = "high"
+	ThinkingTypeEnabled  = "enabled"
+	ThinkingTypeDisabled = "disabled"
+	ThinkingKeepAll      = "all"
+	ReasoningEffortLow   = "low"
+	ReasoningEffortHigh  = "high"
+	ReasoningEffortMax   = "max"
 
 	VerbosityLevelLow    = "low"
 	VerbosityLevelMedium = "medium"
@@ -253,20 +261,23 @@ type WaveContinueResponse struct {
 
 // Wave Specific AI opts for configuration
 type AIOptsType struct {
-	Provider      string   `json:"provider,omitempty"`
-	APIType       string   `json:"apitype,omitempty"`
-	Model         string   `json:"model"`
-	APIToken      string   `json:"apitoken"`
-	APIVersion    string   `json:"apiversion,omitempty"`
-	Endpoint      string   `json:"endpoint,omitempty"`
-	ProxyURL      string   `json:"proxyurl,omitempty"`
-	MaxTokens     int      `json:"maxtokens,omitempty"`
-	TimeoutMs     int      `json:"timeoutms,omitempty"`
-	ThinkingLevel string   `json:"thinkinglevel,omitempty"` // ThinkingLevelLow, ThinkingLevelMedium, or ThinkingLevelHigh
-	Verbosity     string   `json:"verbosity,omitempty"`     // Text verbosity level (OpenAI Responses API only, ignored by other backends)
-	AIMode        string   `json:"aimode,omitempty"`
-	Capabilities  []string `json:"capabilities,omitempty"`
-	WaveAIPremium bool     `json:"waveaipremium,omitempty"`
+	Provider        string   `json:"provider,omitempty"`
+	APIType         string   `json:"apitype,omitempty"`
+	Model           string   `json:"model"`
+	APIToken        string   `json:"apitoken"`
+	APIVersion      string   `json:"apiversion,omitempty"`
+	Endpoint        string   `json:"endpoint,omitempty"`
+	ProxyURL        string   `json:"proxyurl,omitempty"`
+	MaxTokens       int      `json:"maxtokens,omitempty"`
+	TimeoutMs       int      `json:"timeoutms,omitempty"`
+	ThinkingLevel   string   `json:"thinkinglevel,omitempty"`   // ThinkingLevelLow, ThinkingLevelMedium, or ThinkingLevelHigh
+	ThinkingType    string   `json:"thinkingtype,omitempty"`    // enabled or disabled for OpenAI-compatible chat providers
+	ThinkingKeep    string   `json:"thinkingkeep,omitempty"`    // all enables preserved thinking where supported
+	ReasoningEffort string   `json:"reasoningeffort,omitempty"` // low, high, or max for providers that expose reasoning_effort
+	Verbosity       string   `json:"verbosity,omitempty"`       // Text verbosity level (OpenAI Responses API only, ignored by other backends)
+	AIMode          string   `json:"aimode,omitempty"`
+	Capabilities    []string `json:"capabilities,omitempty"`
+	WaveAIPremium   bool     `json:"waveaipremium,omitempty"`
 }
 
 func (opts AIOptsType) IsWaveProxy() bool {
@@ -624,6 +635,27 @@ func AreModelsCompatible(apiType, model1, model2 string) bool {
 		}
 
 		if gpt5Models[model1] && gpt5Models[model2] {
+			return true
+		}
+	}
+
+	if apiType == APIType_OpenAIChat {
+		model1Lower := strings.ToLower(model1)
+		model2Lower := strings.ToLower(model2)
+		if strings.HasPrefix(model1Lower, "deepseek-") && strings.HasPrefix(model2Lower, "deepseek-") {
+			return true
+		}
+		if (strings.HasPrefix(model1Lower, "kimi-") || strings.HasPrefix(model1Lower, "moonshot-")) &&
+			(strings.HasPrefix(model2Lower, "kimi-") || strings.HasPrefix(model2Lower, "moonshot-")) {
+			return true
+		}
+		kimiCodeModels := map[string]bool{
+			"k3":                        true,
+			"k3-256k":                   true,
+			"kimi-for-coding":           true,
+			"kimi-for-coding-highspeed": true,
+		}
+		if kimiCodeModels[model1Lower] && kimiCodeModels[model2Lower] {
 			return true
 		}
 	}

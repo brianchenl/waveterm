@@ -265,7 +265,6 @@ func StartWslShellProc(ctx context.Context, termSize waveobj.TermSize, cmdStr st
 	if err != nil {
 		conn.Infof(ctx, "error packing swap token: %v", err)
 	} else {
-		conn.Debugf(ctx, "packed swaptoken %s\n", packedToken)
 		cmdCombined = fmt.Sprintf(`%s=%s %s`, wavebase.WaveSwapTokenVarName, packedToken, cmdCombined)
 	}
 	jwtToken := cmdOpts.SwapToken.Env[wavebase.WaveJwtTokenVarName]
@@ -273,7 +272,6 @@ func StartWslShellProc(ctx context.Context, termSize waveobj.TermSize, cmdStr st
 		conn.Debugf(ctx, "adding JWT token to environment\n")
 		cmdCombined = fmt.Sprintf(`%s=%s %s`, wavebase.WaveJwtTokenVarName, jwtToken, cmdCombined)
 	}
-	log.Printf("full combined command: %s", cmdCombined)
 	ecmd := exec.Command("wsl.exe", "~", "-d", client.Name(), "--", "sh", "-c", cmdCombined)
 	if termSize.Rows == 0 || termSize.Cols == 0 {
 		termSize.Rows = shellutil.DefaultTermRows
@@ -373,7 +371,6 @@ func StartRemoteShellProc(ctx context.Context, logCtx context.Context, termSize 
 	shellOpts = append(shellOpts, cmdOpts.ShellOpts...)
 	shellType := shellutil.GetShellTypeFromShellPath(shellPath)
 	conn.Infof(logCtx, "detected shell type: %s\n", shellType)
-	conn.Infof(logCtx, "swaptoken: %s\n", cmdOpts.SwapToken.Token)
 	conn.Debugf(logCtx, "cmdStr: %q\n", cmdStr)
 
 	if cmdStr == "" {
@@ -450,7 +447,6 @@ func StartRemoteShellProc(ctx context.Context, logCtx context.Context, termSize 
 	if err != nil {
 		conn.Infof(logCtx, "error packing swap token: %v", err)
 	} else {
-		conn.Debugf(logCtx, "packed swaptoken %s\n", packedToken)
 		cmdCombined = fmt.Sprintf(`%s=%s %s`, wavebase.WaveSwapTokenVarName, packedToken, cmdCombined)
 	}
 	jwtToken := cmdOpts.SwapToken.Env[wavebase.WaveJwtTokenVarName]
@@ -552,7 +548,6 @@ func StartRemoteShellJob(ctx context.Context, logCtx context.Context, termSize w
 		if err != nil {
 			conn.Infof(logCtx, "error packing swap token: %v", err)
 		} else {
-			conn.Debugf(logCtx, "packed swaptoken %s\n", packedToken)
 			env[wavebase.WaveSwapTokenVarName] = packedToken
 		}
 		jwtToken := cmdOpts.SwapToken.Env[wavebase.WaveJwtTokenVarName]
@@ -634,7 +629,6 @@ func StartLocalShellProc(logCtx context.Context, termSize waveobj.TermSize, cmdS
 	if err != nil {
 		blocklogger.Infof(logCtx, "error packing swap token: %v", err)
 	} else {
-		blocklogger.Debugf(logCtx, "packed swaptoken %s\n", packedToken)
 		shellutil.UpdateCmdEnv(ecmd, map[string]string{wavebase.WaveSwapTokenVarName: packedToken})
 	}
 	jwtToken := cmdOpts.SwapToken.Env[wavebase.WaveJwtTokenVarName]

@@ -10,6 +10,7 @@ import path from "path";
 import { configureAuthKeyRequestInjection } from "./authkey";
 import { setWasActive } from "./emain-activity";
 import { getElectronAppBasePath, isDevVite, unamePlatform } from "./emain-platform";
+import { configureWebviewAttachmentSecurity, validateExternalUrl } from "./emain-security";
 import {
     decreaseZoomLevel,
     handleCtrlShiftFocus,
@@ -35,6 +36,14 @@ function handleWindowsMenuAccelerators(
 
     if (checkKeyPressed(waveEvent, "Ctrl:Shift:r")) {
         tabView.webContents.reloadIgnoringCache();
+        return true;
+    }
+
+    // Mirror macOS Cmd+C with the Windows key when Windows delivers the
+    // shortcut to Wave. Keep Ctrl+C untouched so terminals can still use it
+    // to interrupt the foreground process, and leave Win+V to Windows.
+    if (checkKeyPressed(waveEvent, "Meta:c")) {
+        tabView.webContents.copy();
         return true;
     }
 
@@ -139,8 +148,16 @@ export class WaveTabView extends WebContentsView {
             webPreferences: {
                 preload: path.join(getElectronAppBasePath(), "preload", "index.cjs"),
                 webviewTag: true,
+                contextIsolation: true,
+                nodeIntegration: false,
+                sandbox: true,
+                webSecurity: true,
             },
         });
+        configureWebviewAttachmentSecurity(
+            this.webContents,
+            path.join(getElectronAppBasePath(), "preload", "preload-webview.cjs")
+        );
         this.createdTs = Date.now();
         this.isWaveAIOpen = false;
         this.savedInitOpts = null;
@@ -211,12 +228,22 @@ export class WaveTabView extends WebContentsView {
     }
 
     positionTabOffScreen(winBounds: Rectangle) {
-        this.setBounds({
+        const offScreenBounds = {
             x: -15000,
             y: -15000,
             width: winBounds.width,
             height: winBounds.height,
-        });
+        };
+        const curBounds = this.getBounds();
+        if (
+            curBounds.x === offScreenBounds.x &&
+            curBounds.y === offScreenBounds.y &&
+            curBounds.width === offScreenBounds.width &&
+            curBounds.height === offScreenBounds.height
+        ) {
+            return;
+        }
+        this.setBounds(offScreenBounds);
     }
 
     isOnScreen() {
@@ -343,9 +370,10 @@ export async function getOrCreateWebViewForTab(waveWindowId: string, tabId: stri
         }
     });
     tabView.webContents.setWindowOpenHandler(({ url, frameName }) => {
-        if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("file://")) {
-            console.log("openExternal fallback", url);
-            shell.openExternal(url);
+        const externalUrl = validateExternalUrl(url);
+        if (externalUrl) {
+            console.log("openExternal fallback", externalUrl);
+            shell.openExternal(externalUrl);
         }
         console.log("window-open denied", url);
         return { action: "deny" };

@@ -17,61 +17,66 @@ import (
 
 const MaxEditFileSize = 100 * 1024 // 100KB
 
-func validateTextFile(expandedPath string, verb string, mustExist bool) (os.FileInfo, error) {
-	if blocked, reason := isBlockedFile(expandedPath); blocked {
-		return nil, fmt.Errorf("access denied: potentially sensitive file: %s", reason)
-	}
-
+func validateTextFile(expandedPath string, verb string, mustExist bool) (string, os.FileInfo, error) {
 	fileInfo, err := os.Lstat(expandedPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			if mustExist {
-				return nil, fmt.Errorf("file does not exist: %s", expandedPath)
+				return "", nil, fmt.Errorf("file does not exist: %s", expandedPath)
 			}
-			return nil, nil
+		} else {
+			return "", nil, fmt.Errorf("failed to stat file: %w", err)
 		}
-		return nil, fmt.Errorf("failed to stat file: %w", err)
 	}
 
-	if fileInfo.Mode()&os.ModeSymlink != 0 {
+	if err == nil && fileInfo.Mode()&os.ModeSymlink != 0 {
 		target, _ := os.Readlink(expandedPath)
 		if target == "" {
 			target = "(unknown)"
 		}
-		return nil, fmt.Errorf("cannot %s symlinks (target: %s). %s the target file directly if needed", verb, utilfn.MarshalJSONString(target), verb)
+		return "", nil, fmt.Errorf("cannot %s symlinks (target: %s). %s the target file directly if needed", verb, utilfn.MarshalJSONString(target), verb)
+	}
+
+	resolvedPath, resolveErr := checkCanonicalPathPolicy(expandedPath, !mustExist)
+	if resolveErr != nil {
+		return "", nil, resolveErr
+	}
+
+	if fileInfo == nil {
+		return resolvedPath, nil, nil
 	}
 
 	if fileInfo.IsDir() {
-		return nil, fmt.Errorf("path is a directory, cannot %s it", verb)
+		return "", nil, fmt.Errorf("path is a directory, cannot %s it", verb)
 	}
 
 	if !fileInfo.Mode().IsRegular() {
-		return nil, fmt.Errorf("path is not a regular file (devices, pipes, sockets not supported)")
+		return "", nil, fmt.Errorf("path is not a regular file (devices, pipes, sockets not supported)")
 	}
 
 	if fileInfo.Size() > MaxEditFileSize {
-		return nil, fmt.Errorf("file is too large (%d bytes, max %d bytes)", fileInfo.Size(), MaxEditFileSize)
+		return "", nil, fmt.Errorf("file is too large (%d bytes, max %d bytes)", fileInfo.Size(), MaxEditFileSize)
 	}
 
-	fileData, err := os.ReadFile(expandedPath)
+	fileData, err := os.ReadFile(resolvedPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
+		return "", nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	if utilfn.HasBinaryData(fileData) {
-		return nil, fmt.Errorf("file appears to contain binary data")
+		return "", nil, fmt.Errorf("file appears to contain binary data")
 	}
 
-	dirPath := filepath.Dir(expandedPath)
+	dirPath := filepath.Dir(resolvedPath)
 	dirInfo, err := os.Stat(dirPath)
 	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("failed to stat directory: %w", err)
+		return "", nil, fmt.Errorf("failed to stat directory: %w", err)
 	}
 	if err == nil && dirInfo.Mode().Perm()&0222 == 0 {
-		return nil, fmt.Errorf("directory is not writable (no write permission)")
+		return "", nil, fmt.Errorf("directory is not writable (no write permission)")
 	}
 
-	return fileInfo, nil
+	return resolvedPath, fileInfo, nil
 }
 
 type writeTextFileParams struct {
@@ -121,7 +126,7 @@ func verifyWriteTextFileInput(input any, toolUseData *uctypes.UIMessageDataToolU
 		return fmt.Errorf("contents appear to contain binary data")
 	}
 
-	_, err = validateTextFile(expandedPath, "write to", false)
+	_, _, err = validateTextFile(expandedPath, "write to", false)
 	if err != nil {
 		return err
 	}
@@ -150,26 +155,26 @@ func writeTextFileCallback(input any, toolUseData *uctypes.UIMessageDataToolUse)
 		return nil, fmt.Errorf("contents appear to contain binary data")
 	}
 
-	fileInfo, err := validateTextFile(expandedPath, "write to", false)
+	resolvedPath, fileInfo, err := validateTextFile(expandedPath, "write to", false)
 	if err != nil {
 		return nil, err
 	}
 
-	dirPath := filepath.Dir(expandedPath)
+	dirPath := filepath.Dir(resolvedPath)
 	err = os.MkdirAll(dirPath, 0755)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create directory: %w", err)
 	}
 
 	if fileInfo != nil {
-		backupPath, err := filebackup.MakeFileBackup(expandedPath)
+		backupPath, err := filebackup.MakeFileBackup(resolvedPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create backup: %w", err)
 		}
 		toolUseData.WriteBackupFileName = backupPath
 	}
 
-	err = os.WriteFile(expandedPath, contentsBytes, 0644)
+	err = os.WriteFile(resolvedPath, contentsBytes, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write file: %w", err)
 	}
@@ -259,7 +264,7 @@ func verifyEditTextFileInput(input any, toolUseData *uctypes.UIMessageDataToolUs
 		return fmt.Errorf("path must be absolute, got relative path: %s", params.Filename)
 	}
 
-	_, err = validateTextFile(expandedPath, "edit", true)
+	_, _, err = validateTextFile(expandedPath, "edit", true)
 	if err != nil {
 		return err
 	}
@@ -285,12 +290,12 @@ func EditTextFileDryRun(input any, fileOverride string) ([]byte, []byte, error) 
 		return nil, nil, fmt.Errorf("path must be absolute, got relative path: %s", params.Filename)
 	}
 
-	_, err = validateTextFile(expandedPath, "edit", true)
+	resolvedPath, _, err := validateTextFile(expandedPath, "edit", true)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	readPath := expandedPath
+	readPath := resolvedPath
 	if fileOverride != "" {
 		readPath = fileOverride
 	}
@@ -323,18 +328,18 @@ func editTextFileCallback(input any, toolUseData *uctypes.UIMessageDataToolUse) 
 		return nil, fmt.Errorf("path must be absolute, got relative path: %s", params.Filename)
 	}
 
-	_, err = validateTextFile(expandedPath, "edit", true)
+	resolvedPath, _, err := validateTextFile(expandedPath, "edit", true)
 	if err != nil {
 		return nil, err
 	}
 
-	backupPath, err := filebackup.MakeFileBackup(expandedPath)
+	backupPath, err := filebackup.MakeFileBackup(resolvedPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create backup: %w", err)
 	}
 	toolUseData.WriteBackupFileName = backupPath
 
-	err = fileutil.ReplaceInFile(expandedPath, params.Edits)
+	err = fileutil.ReplaceInFile(resolvedPath, params.Edits)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +451,7 @@ func verifyDeleteTextFileInput(input any, toolUseData *uctypes.UIMessageDataTool
 		return fmt.Errorf("path must be absolute, got relative path: %s", params.Filename)
 	}
 
-	_, err = validateTextFile(expandedPath, "delete", true)
+	_, _, err = validateTextFile(expandedPath, "delete", true)
 	if err != nil {
 		return err
 	}
@@ -470,18 +475,18 @@ func deleteTextFileCallback(input any, toolUseData *uctypes.UIMessageDataToolUse
 		return nil, fmt.Errorf("path must be absolute, got relative path: %s", params.Filename)
 	}
 
-	_, err = validateTextFile(expandedPath, "delete", true)
+	resolvedPath, _, err := validateTextFile(expandedPath, "delete", true)
 	if err != nil {
 		return nil, err
 	}
 
-	backupPath, err := filebackup.MakeFileBackup(expandedPath)
+	backupPath, err := filebackup.MakeFileBackup(resolvedPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create backup: %w", err)
 	}
 	toolUseData.WriteBackupFileName = backupPath
 
-	err = os.Remove(expandedPath)
+	err = os.Remove(resolvedPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete file: %w", err)
 	}

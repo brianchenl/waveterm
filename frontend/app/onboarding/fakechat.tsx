@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { WaveStreamdown } from "@/app/element/streamdown";
+import { tCurrent } from "@/app/i18n/current-i18n";
 import { memo, useEffect, useRef, useState } from "react";
 
 interface ChatConfig {
@@ -212,7 +213,7 @@ const FakeAIPanelHeader = memo(() => {
                     <span className="text-gray-300 mr-1 text-[12px]">Context</span>
                     <button
                         className="relative inline-flex h-6 w-14 items-center rounded-full transition-colors bg-accent-600"
-                        title="Widget Access ON"
+                        title={tCurrent("Widget Access ON")}
                     >
                         <span className="absolute inline-block h-4 w-4 transform rounded-full bg-white transition-transform translate-x-8" />
                         <span className="relative z-10 text-xs text-white transition-all ml-2.5 mr-6 text-left font-bold">
@@ -223,7 +224,7 @@ const FakeAIPanelHeader = memo(() => {
 
                 <button
                     className="text-gray-400 transition-colors p-1 rounded flex-shrink-0 ml-2 focus:outline-none"
-                    title="More options"
+                    title={tCurrent("More options")}
                 >
                     <i className="fa fa-ellipsis-vertical"></i>
                 </button>

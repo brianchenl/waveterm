@@ -29,6 +29,7 @@ const DefaultTimeoutMs = 5000
 const RespChSize = 32
 const DefaultMessageChSize = 32
 const CtxDoneChSize = 10
+const MaxConcurrentRequestHandlers = 128
 
 var blockingExpMap = ds.MakeExpMap[bool]()
 
@@ -61,6 +62,7 @@ type WshRpc struct {
 	Debug              bool
 	DebugName          string
 	ServerDone         bool
+	requestHandlerSem  chan struct{}
 }
 
 type wshRpcContextKey struct{}
@@ -231,6 +233,7 @@ func MakeWshRpcWithChannels(inputCh chan baseds.RpcInputChType, outputCh chan []
 		EventListener:      MakeEventListener(),
 		ServerImpl:         serverImpl,
 		ResponseHandlerMap: make(map[string]*RpcResponseHandler),
+		requestHandlerSem:  make(chan struct{}, MaxConcurrentRequestHandlers),
 	}
 	rtn.RpcContext.Store(&rpcCtx)
 	rtn.StreamBroker = streamclient.NewBroker(AdaptWshRpc(rtn))
@@ -431,18 +434,38 @@ outer:
 			}
 
 			ingressLinkId := inputVal.IngressLinkId
-			go func() {
-				defer func() {
-					panichandler.PanicHandler("handleRequest:goroutine", recover())
+			select {
+			case w.requestHandlerSem <- struct{}{}:
+				go func() {
+					defer func() {
+						panichandler.PanicHandler("handleRequest:goroutine", recover())
+						<-w.requestHandlerSem
+					}()
+					w.handleRequest(&msg, ingressLinkId)
 				}()
-				w.handleRequest(&msg, ingressLinkId)
-			}()
+			default:
+				w.sendServerOverloadedResponse(&msg)
+			}
 		} else {
 			w.sendRespWithBlockMessage(msg)
 			if !msg.Cont {
 				w.unregisterRpc(msg.ResId, nil)
 			}
 		}
+	}
+}
+
+func (w *WshRpc) sendServerOverloadedResponse(req *RpcMessage) {
+	if req.ReqId == "" {
+		return
+	}
+	respBytes, err := json.Marshal(RpcMessage{ResId: req.ReqId, Error: "RPC server overloaded"})
+	if err != nil {
+		return
+	}
+	select {
+	case w.OutputCh <- respBytes:
+	default:
 	}
 }
 

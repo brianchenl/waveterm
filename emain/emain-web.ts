@@ -2,24 +2,37 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { ipcMain, webContents, WebContents } from "electron";
+import { createSecureIpcRegistrar } from "./emain-ipc-guard";
 import { WaveBrowserWindow } from "./emain-window";
 
 export function getWebContentsByBlockId(ww: WaveBrowserWindow, tabId: string, blockId: string): Promise<WebContents> {
     const prtn = new Promise<WebContents>((resolve, reject) => {
-        const randId = Math.floor(Math.random() * 1000000000).toString();
-        const respCh = `getWebContentsByBlockId-${randId}`;
-        ww?.activeTabView?.webContents.send("webcontentsid-from-blockid", blockId, respCh);
-        ipcMain.once(respCh, (event, webContentsId) => {
-            if (webContentsId == null) {
-                resolve(null);
-                return;
-            }
-            const wc = webContents.fromId(parseInt(webContentsId));
-            resolve(wc);
-        });
-        setTimeout(() => {
+        const respCh = `getWebContentsByBlockId-${crypto.randomUUID()}`;
+        const requestingWebContents = ww?.activeTabView?.webContents;
+        if (requestingWebContents == null) {
+            resolve(null);
+            return;
+        }
+        const responseIpc = createSecureIpcRegistrar(ipcMain, (event) => event.sender.id === requestingWebContents.id);
+        let timeoutId: NodeJS.Timeout;
+        const cancelResponse = responseIpc.once(
+            respCh,
+            (event, webContentsId) => {
+                clearTimeout(timeoutId);
+                if (webContentsId == null) {
+                    resolve(null);
+                    return;
+                }
+                const wc = webContents.fromId(parseInt(webContentsId));
+                resolve(wc?.getType() === "webview" && wc.hostWebContents?.id === event.sender.id ? wc : null);
+            },
+            (webContentsId) => webContentsId == null || Number.isSafeInteger(Number(webContentsId))
+        );
+        timeoutId = setTimeout(() => {
+            cancelResponse();
             reject(new Error("timeout waiting for response"));
         }, 2000);
+        requestingWebContents.send("webcontentsid-from-blockid", blockId, respCh);
     });
     return prtn;
 }

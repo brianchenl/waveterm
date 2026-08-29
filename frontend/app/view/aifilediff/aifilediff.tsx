@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { BlockNodeModel } from "@/app/block/blocktypes";
+import { useTranslation } from "@/app/i18n/use-i18n";
 import type { TabModel } from "@/app/store/tab-model";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { DiffViewer } from "@/app/view/codeeditor/diffviewer";
@@ -61,6 +62,7 @@ export class AiFileDiffViewModel implements ViewModel {
 }
 
 function AiFileDiffView({ blockId, model }: ViewComponentProps<AiFileDiffViewModel>) {
+    const { t } = useTranslation();
     const blockData = jotai.useAtomValue(model.blockAtom);
     const diffData = jotai.useAtomValue(model.diffDataAtom);
     const error = jotai.useAtomValue(model.errorAtom);
@@ -118,7 +120,7 @@ function AiFileDiffView({ blockId, model }: ViewComponentProps<AiFileDiffViewMod
     if (loading) {
         return (
             <div className="flex items-center justify-center w-full h-full">
-                <div className="text-secondary">Loading diff...</div>
+                <div className="text-secondary">{t("Loading diff...")}</div>
             </div>
         );
     }
@@ -134,7 +136,7 @@ function AiFileDiffView({ blockId, model }: ViewComponentProps<AiFileDiffViewMod
     if (!diffData) {
         return (
             <div className="flex items-center justify-center w-full h-full">
-                <div className="text-secondary">No diff data available</div>
+                <div className="text-secondary">{t("No diff data available")}</div>
             </div>
         );
     }

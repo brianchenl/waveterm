@@ -1,6 +1,7 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { tCurrent } from "@/app/i18n/current-i18n";
 import { getApi, globalStore, WOS } from "@/app/store/global";
 import { waveEventSubscribeSingle } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
@@ -182,13 +183,12 @@ class TsunamiViewModel extends WebViewModel {
         const items = super.getSettingsMenuItems();
         // Filter out homepage and navigation-related menu items for tsunami view
         const filteredItems = items.filter((item) => {
-            const label = item.label?.toLowerCase() || "";
-            return (
-                !label.includes("homepage") &&
-                !label.includes("home page") &&
-                !label.includes("navigation") &&
-                !label.includes("nav")
-            );
+            return ![
+                tCurrent("Set Block Homepage"),
+                tCurrent("Set Default Homepage"),
+                tCurrent("Un-Hide Navigation"),
+                tCurrent("Hide Navigation"),
+            ].includes(item.label);
         });
 
         // Check if we should show the Remix option
@@ -199,15 +199,15 @@ class TsunamiViewModel extends WebViewModel {
         // Add tsunami-specific menu items at the beginning
         const tsunamiItems: ContextMenuItem[] = [
             {
-                label: "Stop WaveApp",
+                label: tCurrent("Stop WaveApp"),
                 click: () => this.destroyController(),
             },
             {
-                label: "Restart WaveApp",
+                label: tCurrent("Restart WaveApp"),
                 click: () => this.restartController(),
             },
             {
-                label: "Restart WaveApp and Force Rebuild",
+                label: tCurrent("Restart WaveApp and Force Rebuild"),
                 click: () => this.restartAndForceRebuild(),
             },
             {
@@ -218,7 +218,7 @@ class TsunamiViewModel extends WebViewModel {
         if (showRemixOption) {
             tsunamiItems.push(
                 {
-                    label: "Remix WaveApp in Builder",
+                    label: tCurrent("Remix WaveApp in Builder"),
                     click: () => this.remixInBuilder(),
                 },
                 {

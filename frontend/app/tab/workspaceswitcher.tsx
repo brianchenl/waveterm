@@ -1,6 +1,8 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { useTranslation } from "@/app/i18n/use-i18n";
+import { globalStore } from "@/app/store/jotaiStore";
 import { useWaveEnv, WaveEnv, WaveEnvSubset } from "@/app/waveenv/waveenv";
 import {
     ExpandableMenu,
@@ -19,10 +21,10 @@ import { OverlayScrollbarsComponent } from "overlayscrollbars-react";
 import { CSSProperties, forwardRef, useCallback, useEffect } from "react";
 import WorkspaceSVG from "../asset/workspace.svg";
 import { IconButton } from "../element/iconbutton";
-import { globalStore } from "@/app/store/jotaiStore";
 import { makeORef } from "../store/wos";
 import { waveEventSubscribeSingle } from "../store/wps";
 import { WorkspaceEditor } from "./workspaceeditor";
+import { getWorkspaceDisplayColor } from "./workspacecolor";
 import "./workspaceswitcher.scss";
 
 export type WorkspaceSwitcherEnv = WaveEnvSubset<{
@@ -50,6 +52,7 @@ const workspaceMapAtom = atom<WorkspaceList>([]);
 const workspaceSplitAtom = splitAtom(workspaceMapAtom);
 const editingWorkspaceAtom = atom<string>();
 const WorkspaceSwitcher = forwardRef<HTMLDivElement>((_, ref) => {
+    const { t } = useTranslation();
     const env = useWaveEnv<WorkspaceSwitcherEnv>();
     const setWorkspaceList = useSetAtom(workspaceMapAtom);
     const activeWorkspace = useAtomValueSafe(env.atoms.workspace);
@@ -65,9 +68,22 @@ const WorkspaceSwitcher = forwardRef<HTMLDivElement>((_, ref) => {
         for (const entry of workspaceList) {
             // This just ensures that the atom exists for easier setting of the object
             globalStore.get(env.wos.getWaveObjectAtom(makeORef("workspace", entry.workspaceid)));
+            const storedWorkspace = await env.services.workspace.GetWorkspace(entry.workspaceid);
+            const displayColor = getWorkspaceDisplayColor(storedWorkspace);
+            const workspace =
+                displayColor === storedWorkspace.color ? storedWorkspace : { ...storedWorkspace, color: displayColor };
+            if (displayColor !== storedWorkspace.color) {
+                await env.services.workspace.UpdateWorkspace(
+                    storedWorkspace.oid,
+                    storedWorkspace.name,
+                    storedWorkspace.icon,
+                    displayColor,
+                    false
+                );
+            }
             newList.push({
                 windowId: entry.windowid,
-                workspace: await env.services.workspace.GetWorkspace(entry.workspaceid),
+                workspace,
             });
         }
         setWorkspaceList(newList);
@@ -93,7 +109,10 @@ const WorkspaceSwitcher = forwardRef<HTMLDivElement>((_, ref) => {
     const isActiveWorkspaceSaved = !!(activeWorkspace.name && activeWorkspace.icon);
 
     const workspaceIcon = isActiveWorkspaceSaved ? (
-        <i className={makeIconClass(activeWorkspace.icon, false)} style={{ color: activeWorkspace.color }}></i>
+        <i
+            className={makeIconClass(activeWorkspace.icon, false)}
+            style={{ color: getWorkspaceDisplayColor(activeWorkspace) }}
+        ></i>
     ) : (
         <WorkspaceSVG />
     );
@@ -123,7 +142,7 @@ const WorkspaceSwitcher = forwardRef<HTMLDivElement>((_, ref) => {
                 <span className="workspace-icon">{workspaceIcon}</span>
             </PopoverButton>
             <PopoverContent className="workspace-switcher-content">
-                <div className="title">{isActiveWorkspaceSaved ? "Switch workspace" : "Open workspace"}</div>
+                <div className="title">{t(isActiveWorkspaceSaved ? "Switch workspace" : "Open workspace")}</div>
                 <OverlayScrollbarsComponent className={"scrollable"} options={{ scrollbars: { autoHide: "leave" } }}>
                     <ExpandableMenu noIndent singleOpen>
                         {workspaceList.map((entry, i) => (
@@ -138,14 +157,14 @@ const WorkspaceSwitcher = forwardRef<HTMLDivElement>((_, ref) => {
                             <ExpandableMenuItemLeftElement>
                                 <i className="fa-sharp fa-solid fa-plus"></i>
                             </ExpandableMenuItemLeftElement>
-                            <div className="content">Create new workspace</div>
+                            <div className="content">{t("Create new workspace")}</div>
                         </ExpandableMenuItem>
                     ) : (
                         <ExpandableMenuItem onClick={() => saveWorkspace()}>
                             <ExpandableMenuItemLeftElement>
                                 <i className="fa-sharp fa-solid fa-floppy-disk"></i>
                             </ExpandableMenuItemLeftElement>
-                            <div className="content">Save workspace</div>
+                            <div className="content">{t("Save workspace")}</div>
                         </ExpandableMenuItem>
                     )}
                 </div>
@@ -161,6 +180,7 @@ const WorkspaceSwitcherItem = ({
     entryAtom: PrimitiveAtom<WorkspaceListEntry>;
     onDeleteWorkspace: (workspaceId: string) => void;
 }) => {
+    const { t } = useTranslation();
     const env = useWaveEnv<WorkspaceSwitcherEnv>();
     const activeWorkspace = useAtomValueSafe(env.atoms.workspace);
     const [workspaceEntry, setWorkspaceEntry] = useAtom(entryAtom);
@@ -189,7 +209,7 @@ const WorkspaceSwitcherItem = ({
         elemtype: "iconbutton",
         className: "edit",
         icon: "pencil",
-        title: "Edit workspace",
+        title: t("Edit workspace"),
         click: (e) => {
             e.stopPropagation();
             if (editingWorkspace === workspace.oid) {
@@ -204,7 +224,7 @@ const WorkspaceSwitcherItem = ({
         className: "window",
         noAction: true,
         icon: isCurrentWorkspace ? "check" : "window",
-        title: isCurrentWorkspace ? "This is your current workspace" : "This workspace is open",
+        title: t(isCurrentWorkspace ? "This is your current workspace" : "This workspace is open"),
     };
 
     const isEditing = editingWorkspace === workspace.oid;

@@ -1,14 +1,17 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { loadMonaco } from "@/app/monaco/monaco-env";
+import { loadMonaco, loadMonacoEditorFeatures, loadMonacoLanguage } from "@/app/monaco/monaco-env";
 import type * as MonacoTypes from "monaco-editor";
-import * as monaco from "monaco-editor";
+import * as monacoCore from "monaco-editor/esm/vs/editor/editor.api.js";
 import { useEffect, useRef } from "react";
 import { debounce } from "throttle-debounce";
 
+const monaco = monacoCore as typeof MonacoTypes;
+
 function createModel(value: string, path: string, language?: string) {
-    const uri = monaco.Uri.parse(`wave://editor/${encodeURIComponent(path)}`);
+    const instanceId = crypto.randomUUID();
+    const uri = monaco.Uri.parse(`wave://editor/${encodeURIComponent(path)}?instance=${instanceId}`);
     return monaco.editor.createModel(value, language, uri);
 }
 
@@ -30,6 +33,8 @@ export function MonacoCodeEditor({ text, readonly, language, onChange, onMount, 
 
     useEffect(() => {
         loadMonaco();
+        loadMonacoEditorFeatures().catch((error) => console.error("Failed to load Monaco editor features", error));
+        loadMonacoLanguage(language).catch((error) => console.error("Failed to load Monaco language support", error));
 
         const el = divRef.current;
         if (!el) return;
@@ -110,7 +115,17 @@ export function MonacoCodeEditor({ text, readonly, language, onChange, onMount, 
         if (!editor) return;
         const model = editor.getModel();
         if (!model || !language) return;
-        monaco.editor.setModelLanguage(model, language);
+        let cancelled = false;
+        loadMonacoLanguage(language)
+            .then(() => {
+                if (!cancelled && !model.isDisposed()) {
+                    monaco.editor.setModelLanguage(model, language);
+                }
+            })
+            .catch((error) => console.error("Failed to load Monaco language support", error));
+        return () => {
+            cancelled = true;
+        };
     }, [language]);
 
     return <div className="flex flex-col h-full w-full" ref={divRef} />;
@@ -131,12 +146,15 @@ export function MonacoDiffViewer({ original, modified, language, path, options }
     // Create once
     useEffect(() => {
         loadMonaco();
+        loadMonacoEditorFeatures().catch((error) => console.error("Failed to load Monaco editor features", error));
+        loadMonacoLanguage(language).catch((error) => console.error("Failed to load Monaco language support", error));
 
         const el = divRef.current;
         if (!el) return;
 
-        const origUri = monaco.Uri.parse(`wave://diff/${encodeURIComponent(path)}.orig`);
-        const modUri = monaco.Uri.parse(`wave://diff/${encodeURIComponent(path)}.mod`);
+        const instanceId = crypto.randomUUID();
+        const origUri = monaco.Uri.parse(`wave://diff/${encodeURIComponent(path)}.orig?instance=${instanceId}`);
+        const modUri = monaco.Uri.parse(`wave://diff/${encodeURIComponent(path)}.mod?instance=${instanceId}`);
 
         const originalModel = monaco.editor.createModel(original, language, origUri);
         const modifiedModel = monaco.editor.createModel(modified, language, modUri);
@@ -183,8 +201,17 @@ export function MonacoDiffViewer({ original, modified, language, path, options }
         if (model.modified.getValue() !== modified) model.modified.setValue(modified);
 
         if (language) {
-            monaco.editor.setModelLanguage(model.original, language);
-            monaco.editor.setModelLanguage(model.modified, language);
+            let cancelled = false;
+            loadMonacoLanguage(language)
+                .then(() => {
+                    if (cancelled || model.original.isDisposed() || model.modified.isDisposed()) return;
+                    monaco.editor.setModelLanguage(model.original, language);
+                    monaco.editor.setModelLanguage(model.modified, language);
+                })
+                .catch((error) => console.error("Failed to load Monaco language support", error));
+            return () => {
+                cancelled = true;
+            };
         }
     }, [original, modified, language]);
 

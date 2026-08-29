@@ -24,6 +24,8 @@
             "openrouter",
             "nanogpt",
             "openai",
+            "deepseek",
+            "kimi",
             "azure",
             "azure-legacy",
             "custom"
@@ -46,6 +48,17 @@
             "low",
             "medium",
             "high"
+          ]
+        },
+        "ai:thinking": {
+          "$ref": "#/$defs/AIThinkingConfigType"
+        },
+        "ai:reasoningeffort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "high",
+            "max"
           ]
         },
         "ai:verbosity": {
@@ -107,6 +120,25 @@
       "required": [
         "display:name"
       ]
+    },
+    "AIThinkingConfigType": {
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "enabled",
+            "disabled"
+          ]
+        },
+        "keep": {
+          "type": "string",
+          "enum": [
+            "all"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
     }
   },
   "additionalProperties": {

@@ -1,6 +1,7 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { useTranslation } from "@/app/i18n/use-i18n";
 import { refocusNode } from "@/app/store/global";
 import { validateCssColor } from "@/util/color-validator";
 import { cn } from "@/util/util";
@@ -52,6 +53,7 @@ export function VTab({
     onHoverChanged,
     renameRef,
 }: VTabProps) {
+    const { t } = useTranslation();
     const [originalName, setOriginalName] = useState(tab.name);
     const [isEditable, setIsEditable] = useState(false);
     const editableRef = useRef<HTMLDivElement>(null);
@@ -194,7 +196,7 @@ export function VTab({
                 )}
                 contentEditable={isEditable}
                 role="textbox"
-                aria-label="Tab name"
+                aria-label={t("Tab name")}
                 aria-readonly={!isEditable}
                 onBlur={handleBlur}
                 onKeyDown={handleKeyDown}
@@ -213,7 +215,7 @@ export function VTab({
                         event.stopPropagation();
                         onClose();
                     }}
-                    aria-label="Close tab"
+                    aria-label={t("Close tab")}
                 >
                     <i className="fa fa-solid fa-xmark" />
                 </button>

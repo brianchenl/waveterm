@@ -22,7 +22,13 @@ const config = {
         {
             from: "./dist",
             to: "./dist",
-            filter: ["**/*", "!bin/*", "bin/wavesrv.${arch}*", "bin/wsh*", "!tsunamiscaffold/**/*"],
+            filter: [
+                "**/*",
+                "!bin/*",
+                "bin/wavesrv.${arch}*",
+                `bin/wsh-${pkg.version}-*`,
+                "!tsunamiscaffold/**/*",
+            ],
         },
         {
             from: ".",
@@ -96,6 +102,7 @@ const config = {
         afterInstall: "build/deb-postinstall.tpl",
     },
     win: {
+        artifactName: "${productName}-windows-${arch}-${version}.${ext}",
         target: ["nsis", "msi", "zip"],
         signtoolOptions: windowsShouldSign && {
             signingHashAlgorithms: ["sha256"],

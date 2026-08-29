@@ -3,6 +3,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { initGlobalAtoms } from "../store/global-atoms";
 import { VTab, VTabItem } from "./vtab";
 
 const OriginalCss = globalThis.CSS;
@@ -26,6 +27,13 @@ function renderVTab(tab: VTabItem): string {
 
 describe("VTab badges", () => {
     beforeAll(() => {
+        initGlobalAtoms({
+            tabId: "test-tab",
+            windowId: "test-window",
+            clientId: "test-client",
+            platform: "win32",
+            environment: "renderer",
+        });
         globalThis.CSS = {
             supports: (_property: string, value: string) => HexColorRegex.test(value),
         } as typeof CSS;

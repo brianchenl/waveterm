@@ -7,7 +7,9 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -38,12 +40,15 @@ import (
 const DefaultAPI = uctypes.APIType_OpenAIResponses
 const DefaultMaxTokens = 4 * 1024
 const BuilderMaxTokens = 24 * 1024
+const MaxAIPostMessageBodyBytes = 16 * 1024 * 1024
+const MaxConcurrentAIPostRequests = 8
 
 var (
 	globalRateLimitInfo = &uctypes.RateLimitInfo{Unknown: true}
 	rateLimitLock       sync.Mutex
 
-	activeChats = ds.MakeSyncMap[bool]() // key is chatid
+	activeChats            = ds.MakeSyncMap[bool]() // key is chatid
+	aiPostRequestSemaphore = make(chan struct{}, MaxConcurrentAIPostRequests)
 )
 
 func getSystemPrompt(apiType string, model string, isBuilder bool, hasToolsCapability bool, widgetAccess bool) []string {
@@ -115,17 +120,22 @@ func getWaveAISettings(premium bool, builderMode bool, rtInfo waveobj.ObjRTInfo,
 		verbosity = uctypes.VerbosityLevelMedium // default to medium
 	}
 	opts := &uctypes.AIOptsType{
-		Provider:      config.Provider,
-		APIType:       config.APIType,
-		Model:         config.Model,
-		MaxTokens:     maxTokens,
-		ThinkingLevel: thinkingLevel,
-		Verbosity:     verbosity,
-		AIMode:        aiMode,
-		Endpoint:      baseUrl,
-		ProxyURL:      config.ProxyURL,
-		Capabilities:  config.Capabilities,
-		WaveAIPremium: config.WaveAIPremium,
+		Provider:        config.Provider,
+		APIType:         config.APIType,
+		Model:           config.Model,
+		MaxTokens:       maxTokens,
+		ThinkingLevel:   thinkingLevel,
+		ReasoningEffort: config.ReasoningEffort,
+		Verbosity:       verbosity,
+		AIMode:          aiMode,
+		Endpoint:        baseUrl,
+		ProxyURL:        config.ProxyURL,
+		Capabilities:    config.Capabilities,
+		WaveAIPremium:   config.WaveAIPremium,
+	}
+	if config.Thinking != nil {
+		opts.ThinkingType = config.Thinking.Type
+		opts.ThinkingKeep = config.Thinking.Keep
 	}
 	if apiToken != "" {
 		opts.APIToken = apiToken
@@ -638,11 +648,35 @@ func WaveAIPostMessageHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	select {
+	case aiPostRequestSemaphore <- struct{}{}:
+		defer func() { <-aiPostRequestSemaphore }()
+	default:
+		http.Error(w, "Too many concurrent AI requests", http.StatusTooManyRequests)
+		return
+	}
 
 	// Parse request body
+	r.Body = http.MaxBytesReader(w, r.Body, MaxAIPostMessageBodyBytes)
+	defer r.Body.Close()
+	decoder := json.NewDecoder(r.Body)
 	var req PostMessageRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decoder.Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "Invalid request body: expected one JSON object", http.StatusBadRequest)
 		return
 	}
 

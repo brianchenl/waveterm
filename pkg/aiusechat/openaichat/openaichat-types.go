@@ -21,6 +21,13 @@ type ChatRequest struct {
 	Temperature         float64              `json:"temperature,omitempty"`
 	Tools               []ToolDefinition     `json:"tools,omitempty"`       // if you use tools
 	ToolChoice          any                  `json:"tool_choice,omitempty"` // "auto", "none", or struct
+	Thinking            *ThinkingConfig      `json:"thinking,omitempty"`
+	ReasoningEffort     string               `json:"reasoning_effort,omitempty"`
+}
+
+type ThinkingConfig struct {
+	Type string `json:"type,omitempty"`
+	Keep string `json:"keep,omitempty"`
 }
 
 type ChatContentPart struct {
@@ -50,29 +57,32 @@ type ChatImageUrl struct {
 }
 
 type ChatRequestMessage struct {
-	Role         string            `json:"role"`                   // "system","user","assistant","tool"
-	Content      string            `json:"-"`                      // plain text (used when ContentParts is nil)
-	ContentParts []ChatContentPart `json:"-"`                      // multimodal parts (used when images present)
-	ToolCalls    []ToolCall        `json:"tool_calls,omitempty"`   // assistant tool-call message
-	ToolCallID   string            `json:"tool_call_id,omitempty"` // for role:"tool"
-	Name         string            `json:"name,omitempty"`         // tool name on role:"tool"
+	Role             string            `json:"role"`                        // "system","user","assistant","tool"
+	Content          string            `json:"-"`                           // plain text (used when ContentParts is nil)
+	ContentParts     []ChatContentPart `json:"-"`                           // multimodal parts (used when images present)
+	ToolCalls        []ToolCall        `json:"tool_calls,omitempty"`        // assistant tool-call message
+	ToolCallID       string            `json:"tool_call_id,omitempty"`      // for role:"tool"
+	Name             string            `json:"name,omitempty"`              // tool name on role:"tool"
+	ReasoningContent string            `json:"reasoning_content,omitempty"` // DeepSeek/Kimi preserved thinking
 }
 
 // chatRequestMessageJSON is the wire format for ChatRequestMessage
 type chatRequestMessageJSON struct {
-	Role       string          `json:"role"`
-	Content    json.RawMessage `json:"content"`
-	ToolCalls  []ToolCall      `json:"tool_calls,omitempty"`
-	ToolCallID string          `json:"tool_call_id,omitempty"`
-	Name       string          `json:"name,omitempty"`
+	Role             string          `json:"role"`
+	Content          json.RawMessage `json:"content"`
+	ToolCalls        []ToolCall      `json:"tool_calls,omitempty"`
+	ToolCallID       string          `json:"tool_call_id,omitempty"`
+	Name             string          `json:"name,omitempty"`
+	ReasoningContent string          `json:"reasoning_content,omitempty"`
 }
 
 func (cm ChatRequestMessage) MarshalJSON() ([]byte, error) {
 	raw := chatRequestMessageJSON{
-		Role:       cm.Role,
-		ToolCalls:  cm.ToolCalls,
-		ToolCallID: cm.ToolCallID,
-		Name:       cm.Name,
+		Role:             cm.Role,
+		ToolCalls:        cm.ToolCalls,
+		ToolCallID:       cm.ToolCallID,
+		Name:             cm.Name,
+		ReasoningContent: cm.ReasoningContent,
 	}
 	if len(cm.ContentParts) > 0 {
 		b, err := json.Marshal(cm.ContentParts)
@@ -99,6 +109,7 @@ func (cm *ChatRequestMessage) UnmarshalJSON(data []byte) error {
 	cm.ToolCalls = raw.ToolCalls
 	cm.ToolCallID = raw.ToolCallID
 	cm.Name = raw.Name
+	cm.ReasoningContent = raw.ReasoningContent
 	cm.Content = ""
 	cm.ContentParts = nil
 	if len(raw.Content) == 0 || bytes.Equal(raw.Content, []byte("null")) {
@@ -193,9 +204,10 @@ type StreamChoice struct {
 
 // This is the important part:
 type ContentDelta struct {
-	Role      string          `json:"role,omitempty"`
-	Content   string          `json:"content,omitempty"`
-	ToolCalls []ToolCallDelta `json:"tool_calls,omitempty"`
+	Role             string          `json:"role,omitempty"`
+	Content          string          `json:"content,omitempty"`
+	ReasoningContent string          `json:"reasoning_content,omitempty"`
+	ToolCalls        []ToolCallDelta `json:"tool_calls,omitempty"`
 }
 
 type ToolCallDelta struct {

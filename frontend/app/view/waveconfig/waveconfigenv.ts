@@ -1,7 +1,7 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import type { MetaKeyAtomFnType, WaveEnv, WaveEnvSubset } from "@/app/waveenv/waveenv";
+import type { MetaKeyAtomFnType, SettingsKeyAtomFnType, WaveEnv, WaveEnvSubset } from "@/app/waveenv/waveenv";
 
 export type WaveConfigEnv = WaveEnvSubset<{
     electron: {
@@ -12,16 +12,20 @@ export type WaveConfigEnv = WaveEnvSubset<{
         FileInfoCommand: WaveEnv["rpc"]["FileInfoCommand"];
         FileReadCommand: WaveEnv["rpc"]["FileReadCommand"];
         FileWriteCommand: WaveEnv["rpc"]["FileWriteCommand"];
+        SetConfigCommand: WaveEnv["rpc"]["SetConfigCommand"];
         SetMetaCommand: WaveEnv["rpc"]["SetMetaCommand"];
         GetSecretsLinuxStorageBackendCommand: WaveEnv["rpc"]["GetSecretsLinuxStorageBackendCommand"];
         GetSecretsNamesCommand: WaveEnv["rpc"]["GetSecretsNamesCommand"];
         GetSecretsCommand: WaveEnv["rpc"]["GetSecretsCommand"];
         SetSecretsCommand: WaveEnv["rpc"]["SetSecretsCommand"];
         RecordTEventCommand: WaveEnv["rpc"]["RecordTEventCommand"];
+        WindowsDiagnosticsCommand: WaveEnv["rpc"]["WindowsDiagnosticsCommand"];
+        AIProviderTestCommand: WaveEnv["rpc"]["AIProviderTestCommand"];
     };
     atoms: {
         fullConfigAtom: WaveEnv["atoms"]["fullConfigAtom"];
     };
     getBlockMetaKeyAtom: MetaKeyAtomFnType<"file">;
+    getSettingsKeyAtom: SettingsKeyAtomFnType<"app:language">;
     isWindows: WaveEnv["isWindows"];
 }>;

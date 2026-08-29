@@ -5,6 +5,7 @@ package wshutil
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -245,6 +246,22 @@ func claimsToRpcCtx(claims *wavejwt.WaveJwtClaims) *wshrpc.RpcContext {
 		Conn:      claims.Conn,
 		IsRouter:  claims.Router,
 	}
+}
+
+// HasRpcCapability maps authenticated RPC principals to capabilities. The
+// renderer's tab and builder routes retain access to secret management, while
+// shell processes authenticate as proc routes and are denied.
+func HasRpcCapability(ctx context.Context, capability string) bool {
+	handler := GetRpcResponseHandlerFromContext(ctx)
+	if handler == nil {
+		return false
+	}
+	source := handler.GetSource()
+	isTrustedUIRoute := strings.HasPrefix(source, RoutePrefix_Tab) || strings.HasPrefix(source, RoutePrefix_Builder)
+	if !isTrustedUIRoute {
+		return false
+	}
+	return capability == wshrpc.RpcCapabilitySecretRead || capability == wshrpc.RpcCapabilitySecretWrite
 }
 
 func ValidateAndExtractRpcContextFromToken(tokenStr string) (*wshrpc.RpcContext, error) {

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { waveAIHasSelection } from "@/app/aipanel/waveai-focus-utils";
+import { tCurrent } from "@/app/i18n/current-i18n";
 import { ContextMenuModel } from "@/app/store/contextmenu";
 import { isDev } from "@/app/store/global";
-import { globalStore } from "@/app/store/jotaiStore";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { WaveAIModel } from "./waveai-model";
@@ -27,7 +27,7 @@ export async function handleWaveAIContextMenu(e: React.MouseEvent, showCopy: boo
     }
 
     menu.push({
-        label: "New Chat",
+        label: tCurrent("New Chat"),
         click: () => {
             model.clearChat();
         },
@@ -121,14 +121,14 @@ export async function handleWaveAIContextMenu(e: React.MouseEvent, showCopy: boo
     }
 
     menu.push({
-        label: "Max Output Tokens",
+        label: tCurrent("Max Output Tokens"),
         submenu: maxTokensSubmenu,
     });
 
     menu.push({ type: "separator" });
 
     menu.push({
-        label: "Configure Modes",
+        label: tCurrent("Configure Modes"),
         click: () => {
             RpcApi.RecordTEventCommand(
                 TabRpcClient,
@@ -148,7 +148,7 @@ export async function handleWaveAIContextMenu(e: React.MouseEvent, showCopy: boo
         menu.push({ type: "separator" });
 
         menu.push({
-            label: "Hide Wave AI",
+            label: tCurrent("Hide Wave AI"),
             click: () => {
                 model.closeWaveAIPanel();
             },

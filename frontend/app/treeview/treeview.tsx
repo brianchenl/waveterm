@@ -1,10 +1,11 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { useTranslation } from "@/app/i18n/use-i18n";
 import { makeIconClass } from "@/util/util";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import clsx from "clsx";
-import React, {
+import {
     CSSProperties,
     KeyboardEvent,
     MouseEvent,
@@ -109,7 +110,8 @@ function sortIdsByNode(nodesById: Map<string, TreeNodeData>, ids: string[]): str
 export function buildVisibleRows(
     nodesById: Map<string, TreeNodeData>,
     rootIds: string[],
-    expandedIds: Set<string>
+    expandedIds: Set<string>,
+    t: (message: string, values?: Record<string, string | number>) => string = (message) => message
 ): TreeViewVisibleRow[] {
     const rows: TreeViewVisibleRow[] = [];
 
@@ -143,7 +145,7 @@ export function buildVisibleRows(
                 parentId: id,
                 depth: depth + 1,
                 kind: "loading",
-                label: "Loading…",
+                label: t("Loading…"),
             });
             return;
         }
@@ -153,7 +155,9 @@ export function buildVisibleRows(
                 parentId: id,
                 depth: depth + 1,
                 kind: "error",
-                label: node.staterror ? `Error: ${node.staterror}` : "Unable to load directory",
+                label: node.staterror
+                    ? t("Error: {{error}}", { error: node.staterror })
+                    : t("Unable to load directory"),
             });
             return;
         }
@@ -167,7 +171,7 @@ export function buildVisibleRows(
                 parentId: id,
                 depth: depth + 1,
                 kind: "capped",
-                label: `Showing first ${capMax} entries`,
+                label: t("Showing first {{count}} entries", { count: capMax }),
             });
         }
     };
@@ -194,7 +198,11 @@ function getNodeIcon(node: TreeNodeData, isExpanded: boolean): string {
         return "file-pdf";
     }
     const extension = normalizeLabel(node).split(".").pop()?.toLocaleLowerCase();
-    if (["js", "jsx", "ts", "tsx", "go", "py", "java", "c", "cpp", "h", "hpp", "json", "yaml", "yml"].includes(extension)) {
+    if (
+        ["js", "jsx", "ts", "tsx", "go", "py", "java", "c", "cpp", "h", "hpp", "json", "yaml", "yml"].includes(
+            extension
+        )
+    ) {
         return "file-code";
     }
     if (["md", "txt", "log"].includes(extension)) {
@@ -204,6 +212,7 @@ function getNodeIcon(node: TreeNodeData, isExpanded: boolean): string {
 }
 
 export const TreeView = forwardRef<TreeViewRef, TreeViewProps>((props, ref) => {
+    const { t } = useTranslation();
     const {
         rootIds,
         initialNodes,
@@ -223,7 +232,10 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>((props, ref) => {
     const [nodesById, setNodesById] = useState<Map<string, TreeNodeData>>(
         () =>
             new Map(
-                Object.entries(initialNodes).map(([id, node]) => [id, { ...node, childrenStatus: node.childrenStatus ?? "unloaded" }])
+                Object.entries(initialNodes).map(([id, node]) => [
+                    id,
+                    { ...node, childrenStatus: node.childrenStatus ?? "unloaded" },
+                ])
             )
     );
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -244,11 +256,11 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>((props, ref) => {
         );
     }, [initialNodes]);
 
-    const visibleRows = useMemo(() => buildVisibleRows(nodesById, rootIds, expandedIds), [nodesById, rootIds, expandedIds]);
-    const idToIndex = useMemo(
-        () => new Map(visibleRows.map((row, index) => [row.id, index])),
-        [visibleRows]
+    const visibleRows = useMemo(
+        () => buildVisibleRows(nodesById, rootIds, expandedIds, t),
+        [nodesById, rootIds, expandedIds, t]
     );
+    const idToIndex = useMemo(() => new Map(visibleRows.map((row, index) => [row.id, index])), [visibleRows]);
     const virtualizer = useVirtualizer({
         count: visibleRows.length,
         getScrollElement: () => scrollRef.current,
@@ -283,7 +295,13 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>((props, ref) => {
 
     const loadChildren = async (id: string) => {
         const currentNode = nodesById.get(id);
-        if (currentNode == null || !currentNode.isDirectory || currentNode.notfound || currentNode.staterror || fetchDir == null) {
+        if (
+            currentNode == null ||
+            !currentNode.isDirectory ||
+            currentNode.notfound ||
+            currentNode.staterror ||
+            fetchDir == null
+        ) {
             return;
         }
         const status = currentNode.childrenStatus ?? "unloaded";
@@ -471,7 +489,10 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>((props, ref) => {
                             >
                                 <div
                                     className="flex items-center"
-                                    style={{ paddingLeft: row.depth * indentWidth, width: ChevronWidth + row.depth * indentWidth }}
+                                    style={{
+                                        paddingLeft: row.depth * indentWidth,
+                                        width: ChevronWidth + row.depth * indentWidth,
+                                    }}
                                 >
                                     {row.kind === "node" && row.isDirectory && row.hasChildren ? (
                                         <button
@@ -497,7 +518,10 @@ export const TreeView = forwardRef<TreeViewRef, TreeViewProps>((props, ref) => {
                                         <i
                                             className={makeIconClass(getNodeIcon(row.node, row.isExpanded), true)}
                                             style={{
-                                                color: row.node.notfound || row.node.staterror ? "var(--color-error)" : "inherit",
+                                                color:
+                                                    row.node.notfound || row.node.staterror
+                                                        ? "var(--color-error)"
+                                                        : "inherit",
                                             }}
                                         />
                                         <span

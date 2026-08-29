@@ -8,6 +8,7 @@ import { BrowserWindow, webContents } from "electron";
 import { globalEvents } from "emain/emain-events";
 import path from "path";
 import { getElectronAppBasePath, isDevVite, unamePlatform } from "./emain-platform";
+import { configureWebviewAttachmentSecurity } from "./emain-security";
 import { calculateWindowBounds, MinWindowHeight, MinWindowWidth } from "./emain-window";
 import { ElectronWshClient } from "./emain-wsh";
 
@@ -67,8 +68,16 @@ export async function createBuilderWindow(appId: string): Promise<BuilderWindowT
         webPreferences: {
             preload: path.join(getElectronAppBasePath(), "preload", "index.cjs"),
             webviewTag: true,
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+            webSecurity: true,
         },
     });
+    configureWebviewAttachmentSecurity(
+        builderWindow.webContents,
+        path.join(getElectronAppBasePath(), "preload", "preload-webview.cjs")
+    );
 
     if (isDevVite) {
         await builderWindow.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html`);

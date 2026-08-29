@@ -10,6 +10,8 @@ import { RpcApi } from "../frontend/app/store/wshclientapi";
 import { isDev } from "../frontend/util/isdev";
 import { fireAndForget } from "../frontend/util/util";
 import { setUserConfirmedQuit } from "./emain-activity";
+import { tMain } from "./emain-i18n";
+import { createSecureIpcRegistrar, isNonWebviewIpcSender } from "./emain-ipc-guard";
 import { delay } from "./emain-util";
 import { focusedWaveWindow, getAllWaveWindows } from "./emain-window";
 import { ElectronWshClient } from "./emain-wsh";
@@ -94,7 +96,7 @@ export class Updater {
             this.status = "ready";
             const updateNotification = new Notification({
                 title: "Wave Terminal",
-                body: "A new version of Wave Terminal is ready to install.",
+                body: tMain("A new version of Wave Terminal is ready to install."),
             });
             updateNotification.on("click", () => {
                 fireAndForget(this.promptToInstallUpdate.bind(this));
@@ -163,7 +165,7 @@ export class Updater {
             if (userInput && !result.downloadPromise) {
                 const dialogOpts: Electron.MessageBoxOptions = {
                     type: "info",
-                    message: "There are currently no updates available.",
+                    message: tMain("There are currently no updates available."),
                 };
                 if (focusedWaveWindow) {
                     dialog.showMessageBox(focusedWaveWindow, dialogOpts);
@@ -181,10 +183,10 @@ export class Updater {
     async promptToInstallUpdate() {
         const dialogOpts: Electron.MessageBoxOptions = {
             type: "info",
-            buttons: ["Restart", "Later"],
-            title: "Application Update",
+            buttons: [tMain("Restart"), tMain("Later")],
+            title: tMain("Application Update"),
             message: process.platform === "win32" ? this.availableUpdateReleaseNotes : this.availableUpdateReleaseName,
-            detail: "A new version has been downloaded. Restart the application to apply the updates.",
+            detail: tMain("A new version has been downloaded. Restart the application to apply the updates."),
         };
 
         const allWindows = getAllWaveWindows();
@@ -214,11 +216,13 @@ export function getResolvedUpdateChannel(): string {
     return isDev() ? "dev" : (autoUpdater.channel ?? "latest");
 }
 
-ipcMain.on("install-app-update", () => fireAndForget(updater?.promptToInstallUpdate.bind(updater)));
-ipcMain.on("get-app-update-status", (event) => {
+const updaterIpc = createSecureIpcRegistrar(ipcMain, isNonWebviewIpcSender);
+
+updaterIpc.on("install-app-update", () => fireAndForget(updater?.promptToInstallUpdate.bind(updater)));
+updaterIpc.on("get-app-update-status", (event) => {
     event.returnValue = updater?.status;
 });
-ipcMain.on("get-updater-channel", (event) => {
+updaterIpc.on("get-updater-channel", (event) => {
     event.returnValue = getResolvedUpdateChannel();
 });
 

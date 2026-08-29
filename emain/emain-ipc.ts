@@ -9,7 +9,8 @@ import * as path from "path";
 import { PNG } from "pngjs";
 import { Readable } from "stream";
 import { RpcApi } from "../frontend/app/store/wshclientapi";
-import { getWebServerEndpoint } from "../frontend/util/endpoints";
+import { getWebServerEndpoint, WebServerEndpointVarName, WSServerEndpointVarName } from "../frontend/util/endpoints";
+import { WaveDevVarName, WaveDevViteVarName } from "../frontend/util/isdev";
 import * as keyutil from "../frontend/util/keyutil";
 import { fireAndForget, parseDataUrl } from "../frontend/util/util";
 import {
@@ -20,7 +21,18 @@ import {
     setWasActive,
 } from "./emain-activity";
 import { createBuilderWindow, getAllBuilderWindows, getBuilderWindowByWebContentsId } from "./emain-builder";
+import { tMain } from "./emain-i18n";
+import { createSecureIpcRegistrar } from "./emain-ipc-guard";
 import { callWithOriginalXdgCurrentDesktopAsync, unamePlatform } from "./emain-platform";
+import {
+    normalizeBuilderAppId,
+    normalizeCaptureRectangle,
+    normalizeImageMimeType,
+    normalizeNativePath,
+    validateExternalUrl,
+    validateImageSourceUrl,
+    validateSavedTextInput,
+} from "./emain-security";
 import { getWaveTabViewByWebContentsId } from "./emain-tabview";
 import { handleCtrlShiftState } from "./emain-util";
 import { getWaveVersion } from "./emain-wavesrv";
@@ -28,12 +40,45 @@ import { createNewWaveWindow, getWaveWindowByWebContentsId } from "./emain-windo
 import { ElectronWshClient } from "./emain-wsh";
 
 const electronApp = electron.app;
+const MaxSavedImageBytes = 25 * 1024 * 1024;
+const MaxRegisteredWebviewKeys = 100;
+const MaxRegisteredWebviewKeyLength = 100;
+const MaxFrontendLogLength = 16 * 1024;
+
+const RendererEnvAllowlist = new Set([
+    WebServerEndpointVarName,
+    WSServerEndpointVarName,
+    WaveDevVarName,
+    WaveDevViteVarName,
+]);
+
+function getOwnerWindowForSender(sender: electron.WebContents): electron.BaseWindow | null {
+    if (sender == null || sender.isDestroyed()) {
+        return null;
+    }
+    return (
+        getWaveWindowByWebContentsId(sender?.id) ??
+        getBuilderWindowByWebContentsId(sender?.id) ??
+        electron.BrowserWindow.fromWebContents(sender) ??
+        null
+    );
+}
+
+function isTrustedAppRenderer(sender: electron.WebContents): boolean {
+    if (sender == null || sender.isDestroyed() || sender.getType() === "webview") {
+        return false;
+    }
+    return getWaveTabViewByWebContentsId(sender.id) != null || getOwnerWindowForSender(sender) != null;
+}
 
 let webviewFocusId: number = null;
 let webviewKeys: string[] = [];
 
 export function openBuilderWindow(appId?: string) {
-    const normalizedAppId = appId || "";
+    const normalizedAppId = normalizeBuilderAppId(appId);
+    if (normalizedAppId == null) {
+        return;
+    }
     const existingBuilderWindows = getAllBuilderWindows();
     const existingWindow = existingBuilderWindows.find((win) => win.builderAppId === normalizedAppId);
     if (existingWindow) {
@@ -60,14 +105,6 @@ function getSingleHeaderVal(headers: Record<string, string | string[]>, key: str
     return val;
 }
 
-function cleanMimeType(mimeType: string): string {
-    if (mimeType == null) {
-        return null;
-    }
-    const parts = mimeType.split(";");
-    return parts[0].trim();
-}
-
 function getFileNameFromUrl(url: string): string {
     try {
         const pathname = new URL(url).pathname;
@@ -80,12 +117,23 @@ function getFileNameFromUrl(url: string): string {
 
 function getUrlInSession(session: Electron.Session, url: string): Promise<UrlInSessionResult> {
     return new Promise((resolve, reject) => {
+        const validatedUrl = validateImageSourceUrl(url);
+        if (validatedUrl == null) {
+            reject(new Error("unsupported image URL"));
+            return;
+        }
+        url = validatedUrl;
         if (url.startsWith("data:")) {
             try {
                 const parsed = parseDataUrl(url);
                 const buffer = Buffer.from(parsed.buffer);
+                const mimeType = normalizeImageMimeType(parsed.mimeType);
+                if (!mimeType?.startsWith("image/") || buffer.byteLength > MaxSavedImageBytes) {
+                    reject(new Error("image data is invalid or too large"));
+                    return;
+                }
                 const readable = Readable.from(buffer);
-                resolve({ stream: readable, mimeType: parsed.mimeType, fileName: "image" });
+                resolve({ stream: readable, mimeType, fileName: "image" });
             } catch (err) {
                 return reject(err);
             }
@@ -96,34 +144,54 @@ function getUrlInSession(session: Electron.Session, url: string): Promise<UrlInS
             method: "GET",
             session,
         });
-        const readable = new Readable({
-            read() {},
-        });
         request.on("response", (response) => {
+            let settled = false;
             const statusCode = response.statusCode;
             if (statusCode < 200 || statusCode >= 300) {
-                readable.destroy();
                 request.abort();
                 reject(new Error(`HTTP request failed with status ${statusCode}: ${response.statusMessage || ""}`));
                 return;
             }
 
-            const mimeType = cleanMimeType(getSingleHeaderVal(response.headers, "content-type"));
+            const mimeType = normalizeImageMimeType(getSingleHeaderVal(response.headers, "content-type"));
+            if (mimeType == null || !mimeType.startsWith("image/")) {
+                request.abort();
+                reject(new Error(`unsupported image MIME type: ${mimeType || "missing"}`));
+                return;
+            }
+            const contentLength = Number(getSingleHeaderVal(response.headers, "content-length"));
+            if (Number.isFinite(contentLength) && contentLength > MaxSavedImageBytes) {
+                request.abort();
+                reject(new Error("image response is too large"));
+                return;
+            }
             const fileName = getFileNameFromUrl(url) || "image";
+            const chunks: Buffer[] = [];
+            let receivedBytes = 0;
             response.on("data", (chunk) => {
-                readable.push(chunk);
+                if (settled) return;
+                const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+                receivedBytes += buffer.byteLength;
+                if (receivedBytes > MaxSavedImageBytes) {
+                    settled = true;
+                    request.abort();
+                    reject(new Error("image response is too large"));
+                    return;
+                }
+                chunks.push(buffer);
             });
             response.on("end", () => {
-                readable.push(null);
-                resolve({ stream: readable, mimeType, fileName });
+                if (settled) return;
+                settled = true;
+                resolve({ stream: Readable.from(Buffer.concat(chunks, receivedBytes)), mimeType, fileName });
             });
             response.on("error", (err) => {
-                readable.destroy(err);
+                if (settled) return;
+                settled = true;
                 reject(err);
             });
         });
         request.on("error", (err) => {
-            readable.destroy(err);
             reject(err);
         });
         request.end();
@@ -139,7 +207,7 @@ function saveImageFileWithNativeDialog(
     if (defaultFileName == null || defaultFileName == "") {
         defaultFileName = "image";
     }
-    const ww = electron.BrowserWindow.fromWebContents(sender);
+    const ww = getOwnerWindowForSender(sender);
     if (ww == null) {
         readStream.destroy();
         return;
@@ -164,9 +232,14 @@ function saveImageFileWithNativeDialog(
     defaultFileName = addExtensionIfNeeded(defaultFileName, mimeType);
     electron.dialog
         .showSaveDialog(ww, {
-            title: "Save Image",
+            title: tMain("Save Image"),
             defaultPath: defaultFileName,
-            filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "heic"] }],
+            filters: [
+                {
+                    name: tMain("Images"),
+                    extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "heic"],
+                },
+            ],
         })
         .then((file) => {
             if (file.canceled) {
@@ -193,12 +266,15 @@ function saveImageFileWithNativeDialog(
 }
 
 export function initIpcHandlers() {
-    electron.ipcMain.on("open-external", (event, url) => {
-        if (url && typeof url === "string") {
+    const secureIpc = createSecureIpcRegistrar(electron.ipcMain, (event) => isTrustedAppRenderer(event.sender));
+
+    secureIpc.on("open-external", (event, url) => {
+        const externalUrl = validateExternalUrl(url);
+        if (externalUrl) {
             fireAndForget(() =>
                 callWithOriginalXdgCurrentDesktopAsync(() =>
-                    electron.shell.openExternal(url).catch((err) => {
-                        console.error(`Failed to open URL ${url}:`, err);
+                    electron.shell.openExternal(externalUrl).catch((err) => {
+                        console.error(`Failed to open URL ${externalUrl}:`, err);
                     })
                 )
             );
@@ -209,19 +285,21 @@ export function initIpcHandlers() {
 
     electron.ipcMain.on("webview-image-contextmenu", (event: electron.IpcMainEvent, payload: { src: string }) => {
         const menu = new electron.Menu();
-        const win = getWaveWindowByWebContentsId(event.sender.hostWebContents?.id);
-        if (win == null) {
+        const hostWebContents = event.sender.hostWebContents;
+        const win = getWaveWindowByWebContentsId(hostWebContents?.id);
+        const imageUrl = validateImageSourceUrl(payload?.src);
+        if (win == null || event.sender.getType() !== "webview" || imageUrl == null) {
             return;
         }
         menu.append(
             new electron.MenuItem({
-                label: "Save Image",
+                label: tMain("Save Image"),
                 click: () => {
-                    const resultP = getUrlInSession(event.sender.session, payload.src);
+                    const resultP = getUrlInSession(event.sender.session, imageUrl);
                     resultP
                         .then((result) => {
                             saveImageFileWithNativeDialog(
-                                event.sender.hostWebContents,
+                                hostWebContents,
                                 result.fileName,
                                 result.mimeType,
                                 result.stream
@@ -237,6 +315,13 @@ export function initIpcHandlers() {
     });
 
     electron.ipcMain.on("webview-mouse-navigate", (event: electron.IpcMainEvent, direction: string) => {
+        if (
+            event.sender.getType() !== "webview" ||
+            !isTrustedAppRenderer(event.sender.hostWebContents) ||
+            (direction !== "back" && direction !== "forward")
+        ) {
+            return;
+        }
         if (direction === "back") {
             event.sender.navigationHistory.goBack();
         } else if (direction === "forward") {
@@ -244,14 +329,18 @@ export function initIpcHandlers() {
         }
     });
 
-    electron.ipcMain.on("download", (event, payload) => {
-        const baseName = encodeURIComponent(path.basename(payload.filePath));
+    secureIpc.on("download", (event, payload) => {
+        const filePath = normalizeNativePath(payload?.filePath, electronApp.getPath("home"));
+        if (filePath == null) {
+            return;
+        }
+        const baseName = encodeURIComponent(path.basename(filePath));
         const streamingUrl =
-            getWebServerEndpoint() + "/wave/stream-file/" + baseName + "?path=" + encodeURIComponent(payload.filePath);
+            getWebServerEndpoint() + "/wave/stream-file/" + baseName + "?path=" + encodeURIComponent(filePath);
         event.sender.downloadURL(streamingUrl);
     });
 
-    electron.ipcMain.on("get-cursor-point", (event) => {
+    secureIpc.on("get-cursor-point", (event) => {
         const tabView = getWaveTabViewByWebContentsId(event.sender.id);
         if (tabView == null) {
             event.returnValue = null;
@@ -266,42 +355,54 @@ export function initIpcHandlers() {
         event.returnValue = retVal;
     });
 
-    electron.ipcMain.handle("capture-screenshot", async (event, rect) => {
+    secureIpc.handle("capture-screenshot", async (event, rect) => {
         const tabView = getWaveTabViewByWebContentsId(event.sender.id);
         if (!tabView) {
             throw new Error("No tab view found for the given webContents id");
         }
-        const image = await tabView.webContents.capturePage(rect);
+        const bounds = tabView.getBounds();
+        const normalizedRect = normalizeCaptureRectangle(rect, { width: bounds.width, height: bounds.height });
+        if (normalizedRect == null) {
+            throw new Error("Invalid screenshot rectangle");
+        }
+        const image = await tabView.webContents.capturePage(normalizedRect);
         const base64String = image.toPNG().toString("base64");
         return `data:image/png;base64,${base64String}`;
     });
 
-    electron.ipcMain.on("get-env", (event, varName) => {
+    secureIpc.on("get-env", (event, varName) => {
+        if (!RendererEnvAllowlist.has(varName)) {
+            event.returnValue = null;
+            return;
+        }
         event.returnValue = process.env[varName] ?? null;
     });
 
-    electron.ipcMain.on("get-about-modal-details", (event) => {
+    secureIpc.on("get-about-modal-details", (event) => {
         event.returnValue = getWaveVersion() as AboutModalDetails;
     });
 
-    electron.ipcMain.on("get-zoom-factor", (event) => {
+    secureIpc.on("get-zoom-factor", (event) => {
         event.returnValue = event.sender.getZoomFactor();
     });
 
     const hasBeforeInputRegisteredMap = new Map<number, boolean>();
 
-    electron.ipcMain.on("webview-focus", (event: Electron.IpcMainEvent, focusedId: number) => {
-        webviewFocusId = focusedId;
-        console.log("webview-focus", focusedId);
+    secureIpc.on("webview-focus", (event: Electron.IpcMainEvent, focusedId: number) => {
         if (focusedId == null) {
+            webviewFocusId = null;
+            return;
+        }
+        if (!Number.isSafeInteger(focusedId)) {
             return;
         }
         const parentWc = event.sender;
         const webviewWc = electron.webContents.fromId(focusedId);
-        if (webviewWc == null) {
-            webviewFocusId = null;
+        if (webviewWc == null || webviewWc.getType() !== "webview" || webviewWc.hostWebContents?.id !== parentWc.id) {
             return;
         }
+        webviewFocusId = focusedId;
+        console.log("webview-focus", focusedId);
         if (!hasBeforeInputRegisteredMap.get(focusedId)) {
             hasBeforeInputRegisteredMap.set(focusedId, true);
             webviewWc.on("before-input-event", (e, input) => {
@@ -328,22 +429,31 @@ export function initIpcHandlers() {
         }
     });
 
-    electron.ipcMain.on("register-global-webview-keys", (event, keys: string[]) => {
-        webviewKeys = keys ?? [];
-    });
+    secureIpc.on(
+        "register-global-webview-keys",
+        (event, keys: string[]) => {
+            webviewKeys = keys
+                .filter(
+                    (key) => typeof key === "string" && key.length > 0 && key.length <= MaxRegisteredWebviewKeyLength
+                )
+                .slice(0, MaxRegisteredWebviewKeys);
+        },
+        (keys) => Array.isArray(keys)
+    );
 
-    electron.ipcMain.on("set-keyboard-chord-mode", (event) => {
+    secureIpc.on("set-keyboard-chord-mode", (event) => {
         event.returnValue = null;
         const tabView = getWaveTabViewByWebContentsId(event.sender.id);
         tabView?.setKeyboardChordMode(true);
     });
 
-    electron.ipcMain.handle("set-is-active", () => {
+    secureIpc.handle("set-is-active", (event) => {
         setWasActive(true);
+        return true;
     });
 
     const fac = new FastAverageColor();
-    electron.ipcMain.on("update-window-controls-overlay", async (event, rect: Dimensions) => {
+    secureIpc.on("update-window-controls-overlay", async (event, rect: Dimensions) => {
         if (unamePlatform === "darwin") return;
         try {
             const fullConfig = await RpcApi.GetFullConfigCommand(ElectronWshClient);
@@ -371,109 +481,134 @@ export function initIpcHandlers() {
         }
     });
 
-    electron.ipcMain.on("quicklook", (event, filePath: string) => {
+    secureIpc.on("quicklook", (event, filePath: string) => {
         if (unamePlatform !== "darwin") return;
-        child_process.execFile("/usr/bin/qlmanage", ["-p", filePath], (error, stdout, stderr) => {
+        const normalizedPath = normalizeNativePath(filePath, electronApp.getPath("home"));
+        if (normalizedPath == null) return;
+        child_process.execFile("/usr/bin/qlmanage", ["-p", normalizedPath], (error, stdout, stderr) => {
             if (error) {
                 console.error(`Error opening Quick Look: ${error}`);
             }
         });
     });
 
-    electron.ipcMain.handle("clear-webview-storage", async (event, webContentsId: number) => {
+    secureIpc.handle("clear-webview-storage", async (event, webContentsId: number) => {
         try {
-            const wc = electron.webContents.fromId(webContentsId);
-            if (wc && wc.session) {
-                await wc.session.clearStorageData();
-                console.log("Cleared cookies and storage for webContentsId:", webContentsId);
+            if (!Number.isSafeInteger(webContentsId)) {
+                throw new Error("Unauthorized webview storage request");
             }
+            const wc = electron.webContents.fromId(webContentsId);
+            if (wc == null || wc.getType() !== "webview" || wc.hostWebContents?.id !== event.sender.id || !wc.session) {
+                throw new Error("Webview does not belong to the requesting renderer");
+            }
+            await wc.session.clearStorageData();
+            console.log("Cleared cookies and storage for webContentsId:", webContentsId);
         } catch (e) {
             console.error("Failed to clear cookies and storage:", e);
             throw e;
         }
     });
 
-    electron.ipcMain.on("open-native-path", (event, filePath: string) => {
-        console.log("open-native-path", filePath);
-        filePath = filePath.replace("~", electronApp.getPath("home"));
+    secureIpc.on("open-native-path", (event, filePath: string) => {
+        const normalizedPath = normalizeNativePath(filePath, electronApp.getPath("home"));
+        if (normalizedPath == null) {
+            console.error("Invalid path received in open-native-path event");
+            return;
+        }
+        console.log("open-native-path", normalizedPath);
         fireAndForget(() =>
             callWithOriginalXdgCurrentDesktopAsync(() =>
-                electron.shell.openPath(filePath).then((excuse) => {
-                    if (excuse) console.error(`Failed to open ${filePath} in native application: ${excuse}`);
+                electron.shell.openPath(normalizedPath).then((excuse) => {
+                    if (excuse) console.error(`Failed to open ${normalizedPath} in native application: ${excuse}`);
                 })
             )
         );
     });
 
-    electron.ipcMain.on("set-window-init-status", (event, status: "ready" | "wave-ready") => {
-        const tabView = getWaveTabViewByWebContentsId(event.sender.id);
-        if (tabView != null && tabView.initResolve != null) {
-            if (status === "ready") {
-                tabView.initResolve();
-                if (tabView.savedInitOpts) {
-                    console.log("savedInitOpts calling wave-init", tabView.waveTabId);
-                    tabView.webContents.send("wave-init", tabView.savedInitOpts);
+    secureIpc.on(
+        "set-window-init-status",
+        (event, status: "ready" | "wave-ready") => {
+            const tabView = getWaveTabViewByWebContentsId(event.sender.id);
+            if (tabView != null && tabView.initResolve != null) {
+                if (status === "ready") {
+                    tabView.initResolve();
+                    if (tabView.savedInitOpts) {
+                        console.log("savedInitOpts calling wave-init", tabView.waveTabId);
+                        tabView.webContents.send("wave-init", tabView.savedInitOpts);
+                    }
+                } else if (status === "wave-ready") {
+                    tabView.waveReadyResolve();
                 }
-            } else if (status === "wave-ready") {
-                tabView.waveReadyResolve();
+                return;
             }
-            return;
-        }
 
-        const builderWindow = getBuilderWindowByWebContentsId(event.sender.id);
-        if (builderWindow != null) {
-            if (status === "ready") {
-                if (builderWindow.savedInitOpts) {
-                    console.log("savedInitOpts calling builder-init", builderWindow.savedInitOpts.builderId);
-                    builderWindow.webContents.send("builder-init", builderWindow.savedInitOpts);
+            const builderWindow = getBuilderWindowByWebContentsId(event.sender.id);
+            if (builderWindow != null) {
+                if (status === "ready") {
+                    if (builderWindow.savedInitOpts) {
+                        console.log("savedInitOpts calling builder-init", builderWindow.savedInitOpts.builderId);
+                        builderWindow.webContents.send("builder-init", builderWindow.savedInitOpts);
+                    }
                 }
+                return;
             }
-            return;
-        }
 
-        console.log("set-window-init-status: no window found for webContentsId", event.sender.id);
-    });
+            console.log("set-window-init-status: no window found for webContentsId", event.sender.id);
+        },
+        (status) => status === "ready" || status === "wave-ready"
+    );
 
-    electron.ipcMain.on("fe-log", (event, logStr: string) => {
-        console.log("fe-log", logStr);
-    });
+    secureIpc.on(
+        "fe-log",
+        (event, logStr: string) => {
+            console.log("fe-log", logStr);
+        },
+        (logStr) => typeof logStr === "string" && logStr.length <= MaxFrontendLogLength
+    );
 
-    electron.ipcMain.on(
+    secureIpc.on(
         "increment-term-commands",
         (event, opts?: { isRemote?: boolean; isWsl?: boolean; isDurable?: boolean }) => {
             incrementTermCommandsRun();
-            if (opts?.isRemote) {
+            if (opts?.isRemote === true) {
                 incrementTermCommandsRemote();
             }
-            if (opts?.isWsl) {
+            if (opts?.isWsl === true) {
                 incrementTermCommandsWsl();
             }
-            if (opts?.isDurable) {
+            if (opts?.isDurable === true) {
                 incrementTermCommandsDurable();
             }
         }
     );
 
-    electron.ipcMain.on("native-paste", (event) => {
+    secureIpc.on("native-paste", (event) => {
         event.sender.paste();
     });
 
-    electron.ipcMain.on("open-builder", (event, appId?: string) => {
-        openBuilderWindow(appId);
-    });
+    secureIpc.on(
+        "open-builder",
+        (event, appId?: string) => {
+            openBuilderWindow(appId);
+        },
+        (appId) => normalizeBuilderAppId(appId) != null
+    );
 
-    electron.ipcMain.on("set-builder-window-appid", (event, appId: string) => {
+    secureIpc.on("set-builder-window-appid", (event, appId: string) => {
         const bw = getBuilderWindowByWebContentsId(event.sender.id);
-        if (bw == null) {
+        const normalizedAppId = normalizeBuilderAppId(appId);
+        if (bw == null || normalizedAppId == null) {
             return;
         }
-        bw.builderAppId = appId;
-        console.log("set-builder-window-appid", bw.builderId, appId);
+        bw.builderAppId = normalizedAppId;
+        console.log("set-builder-window-appid", bw.builderId, normalizedAppId);
     });
 
-    electron.ipcMain.on("open-new-window", () => fireAndForget(createNewWaveWindow));
+    secureIpc.on("open-new-window", (event) => {
+        fireAndForget(createNewWaveWindow);
+    });
 
-    electron.ipcMain.on("close-builder-window", async (event) => {
+    secureIpc.on("close-builder-window", async (event) => {
         const bw = getBuilderWindowByWebContentsId(event.sender.id);
         if (bw == null) {
             return;
@@ -504,25 +639,26 @@ export function initIpcHandlers() {
         bw.destroy();
     });
 
-    electron.ipcMain.on("do-refresh", (event) => {
+    secureIpc.on("do-refresh", (event) => {
         event.sender.reloadIgnoringCache();
     });
 
-    electron.ipcMain.handle("save-text-file", async (event, fileName: string, content: string) => {
-        const ww = electron.BrowserWindow.fromWebContents(event.sender);
-        if (ww == null) {
+    secureIpc.handle("save-text-file", async (event, fileName: string, content: string) => {
+        const input = validateSavedTextInput(fileName, content);
+        const ww = getOwnerWindowForSender(event.sender);
+        if (ww == null || input == null) {
             return false;
         }
         const result = await electron.dialog.showSaveDialog(ww, {
-            title: "Save Scrollback",
-            defaultPath: fileName || "session.log",
-            filters: [{ name: "Text Files", extensions: ["txt", "log"] }],
+            title: tMain("Save Scrollback"),
+            defaultPath: input.fileName,
+            filters: [{ name: tMain("Text Files"), extensions: ["txt", "log"] }],
         });
         if (result.canceled || !result.filePath) {
             return false;
         }
         try {
-            await fs.promises.writeFile(result.filePath, content, "utf-8");
+            await fs.promises.writeFile(result.filePath, input.content, "utf-8");
             console.log("saved scrollback to", result.filePath);
             return true;
         } catch (err) {

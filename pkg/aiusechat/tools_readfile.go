@@ -19,6 +19,10 @@ import (
 
 const ReadFileDefaultLineCount = 100
 const ReadFileDefaultMaxBytes = 50 * 1024
+const ReadFileMaxLineCount = 10_000
+const ReadFileMaxOffset = 1_000_000
+const ReadFileMaxBytes = 5 * 1024 * 1024
+const ReadFileMaxScanBytes = 32 * 1024 * 1024
 const StopReasonMaxBytes = "max_bytes"
 
 type readTextFileParams struct {
@@ -61,6 +65,9 @@ func parseReadTextFileInput(input any) (*readTextFileParams, error) {
 	if *result.Offset < 0 {
 		return nil, fmt.Errorf("offset must be non-negative, got %d", *result.Offset)
 	}
+	if *result.Offset > ReadFileMaxOffset {
+		return nil, fmt.Errorf("offset exceeds maximum of %d, got %d", ReadFileMaxOffset, *result.Offset)
+	}
 
 	if result.Count == nil {
 		count := ReadFileDefaultLineCount
@@ -70,10 +77,19 @@ func parseReadTextFileInput(input any) (*readTextFileParams, error) {
 	if *result.Count < 1 {
 		return nil, fmt.Errorf("count must be at least 1, got %d", *result.Count)
 	}
+	if *result.Count > ReadFileMaxLineCount {
+		return nil, fmt.Errorf("count exceeds maximum of %d, got %d", ReadFileMaxLineCount, *result.Count)
+	}
 
 	if result.MaxBytes == nil {
 		maxBytes := ReadFileDefaultMaxBytes
 		result.MaxBytes = &maxBytes
+	}
+	if *result.MaxBytes < 1 {
+		return nil, fmt.Errorf("max_bytes must be at least 1, got %d", *result.MaxBytes)
+	}
+	if *result.MaxBytes > ReadFileMaxBytes {
+		return nil, fmt.Errorf("max_bytes exceeds maximum of %d, got %d", ReadFileMaxBytes, *result.MaxBytes)
 	}
 
 	return result, nil
@@ -212,11 +228,12 @@ func verifyReadTextFileInput(input any, toolUseData *uctypes.UIMessageDataToolUs
 		return fmt.Errorf("path must be absolute, got relative path: %s", params.Filename)
 	}
 
-	if blocked, reason := isBlockedFile(expandedPath); blocked {
-		return fmt.Errorf("access denied: potentially sensitive file: %s", reason)
+	resolvedPath, err := checkCanonicalPathPolicy(expandedPath, false)
+	if err != nil {
+		return err
 	}
 
-	fileInfo, err := os.Stat(expandedPath)
+	fileInfo, err := os.Stat(resolvedPath)
 	if err != nil {
 		return fmt.Errorf("failed to stat file: %w", err)
 	}
@@ -229,8 +246,6 @@ func verifyReadTextFileInput(input any, toolUseData *uctypes.UIMessageDataToolUs
 }
 
 func readTextFileCallback(input any, toolUseData *uctypes.UIMessageDataToolUse) (any, error) {
-	const ReadLimit = 1024 * 1024 * 1024
-
 	params, err := parseReadTextFileInput(input)
 	if err != nil {
 		return nil, err
@@ -245,11 +260,12 @@ func readTextFileCallback(input any, toolUseData *uctypes.UIMessageDataToolUse) 
 		return nil, fmt.Errorf("path must be absolute, got relative path: %s", params.Filename)
 	}
 
-	if blocked, reason := isBlockedFile(expandedPath); blocked {
-		return nil, fmt.Errorf("access denied: potentially sensitive file: %s", reason)
+	resolvedPath, err := checkCanonicalPathPolicy(expandedPath, false)
+	if err != nil {
+		return nil, err
 	}
 
-	fileInfo, err := os.Stat(expandedPath)
+	fileInfo, err := os.Stat(resolvedPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat file: %w", err)
 	}
@@ -258,7 +274,7 @@ func readTextFileCallback(input any, toolUseData *uctypes.UIMessageDataToolUse) 
 		return nil, fmt.Errorf("path is a directory, cannot be read with the read_text_file tool. use the read_dir tool if available to read directories")
 	}
 
-	file, err := os.Open(expandedPath)
+	file, err := os.Open(resolvedPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
@@ -291,12 +307,12 @@ func readTextFileCallback(input any, toolUseData *uctypes.UIMessageDataToolUse) 
 	}
 
 	if origin == "end" {
-		lines, stopReason, err = readutil.ReadTailLines(file, count, offset, int64(ReadLimit))
+		lines, stopReason, err = readutil.ReadTailLines(file, count, offset, int64(ReadFileMaxScanBytes))
 		if err != nil {
 			return nil, fmt.Errorf("error reading file from end: %w", err)
 		}
 	} else {
-		lines, stopReason, err = readutil.ReadLines(file, count, offset, ReadLimit)
+		lines, stopReason, err = readutil.ReadLines(file, count, offset, ReadFileMaxScanBytes)
 		if err != nil {
 			return nil, fmt.Errorf("error reading file: %w", err)
 		}
@@ -353,12 +369,14 @@ func GetReadTextFileToolDefinition() uctypes.ToolDefinition {
 				"count": map[string]any{
 					"type":        "integer",
 					"minimum":     1,
+					"maximum":     ReadFileMaxLineCount,
 					"default":     ReadFileDefaultLineCount,
 					"description": "Number of lines to return",
 				},
 				"max_bytes": map[string]any{
 					"type":        "integer",
 					"minimum":     1,
+					"maximum":     ReadFileMaxBytes,
 					"default":     ReadFileDefaultMaxBytes,
 					"description": "Maximum bytes to return. If the result exceeds this, it will be truncated at line boundaries",
 				},

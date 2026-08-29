@@ -3,6 +3,7 @@
 
 import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { BlockNodeModel } from "@/app/block/blocktypes";
+import { tCurrent } from "@/app/i18n/current-i18n";
 import { appHandleKeyDown } from "@/app/store/keymodel";
 import { modalsModel } from "@/app/store/modalmodel";
 import type { TabModel } from "@/app/store/tab-model";
@@ -132,7 +133,7 @@ export class TermViewModel implements ViewModel {
                     {
                         elemtype: "iconbutton",
                         icon: "square-terminal",
-                        title: "Switch back to Terminal",
+                        title: tCurrent("Switch back to Terminal"),
                         click: () => {
                             this.setTermMode("term");
                         },
@@ -145,7 +146,7 @@ export class TermViewModel implements ViewModel {
                 rtn.push({
                     elemtype: "iconbutton",
                     icon: "bolt",
-                    title: "Switch to Wave App",
+                    title: tCurrent("Switch to Wave App"),
                     click: () => {
                         this.setTermMode("vdom");
                     },
@@ -171,7 +172,7 @@ export class TermViewModel implements ViewModel {
                         icon: "refresh",
                         iconColor: "var(--success-color)",
                         iconSpin: true,
-                        title: "Restarting Command",
+                        title: tCurrent("Restarting Command"),
                         noAction: true,
                     });
                 } else {
@@ -182,7 +183,7 @@ export class TermViewModel implements ViewModel {
                                 elemtype: "iconbutton",
                                 icon: "check",
                                 iconColor: "var(--success-color)",
-                                title: "Command Exited Successfully",
+                                title: tCurrent("Command Exited Successfully"),
                                 noAction: true,
                             });
                         } else {
@@ -190,7 +191,9 @@ export class TermViewModel implements ViewModel {
                                 elemtype: "iconbutton",
                                 icon: "xmark-large",
                                 iconColor: "var(--error-color)",
-                                title: "Exit Code: " + fullShellProcStatus?.shellprocexitcode,
+                                title: tCurrent("Exit Code: {{code}}", {
+                                    code: fullShellProcStatus?.shellprocexitcode,
+                                }),
                                 noAction: true,
                             });
                         }
@@ -201,9 +204,9 @@ export class TermViewModel implements ViewModel {
             if (isMI && this.isBasicTerm(get)) {
                 rtn.push({
                     elemtype: "textbutton",
-                    text: "Multi Input ON",
+                    text: tCurrent("Multi Input ON"),
                     className: "yellow !py-[2px] !px-[10px] text-[11px] font-[500]",
-                    title: "Input will be sent to all connected terminals (click to disable)",
+                    title: tCurrent("Input will be sent to all connected terminals (click to disable)"),
                     onClick: () => {
                         globalStore.set(this.tabModel.isTermMultiInput, false);
                     },
@@ -411,7 +414,7 @@ export class TermViewModel implements ViewModel {
                 elemtype: "iconbutton",
                 icon,
                 className: "text-muted",
-                title: "No shell integration — Wave AI unable to run commands.",
+                title: tCurrent("No shell integration — Wave AI unable to run commands."),
                 noAction: true,
             };
         }
@@ -420,21 +423,23 @@ export class TermViewModel implements ViewModel {
                 elemtype: "iconbutton",
                 icon,
                 className: "text-accent",
-                title: "Shell ready — Wave AI can run commands in this terminal.",
+                title: tCurrent("Shell ready — Wave AI can run commands in this terminal."),
                 noAction: true,
             };
         }
         if (shellIntegrationStatus === "running-command") {
             let title = claudeCodeActive
-                ? "Claude Code Detected"
-                : "Shell busy — Wave AI unable to run commands while another command is running.";
+                ? tCurrent("Claude Code Detected")
+                : tCurrent("Shell busy — Wave AI unable to run commands while another command is running.");
 
             if (this.termRef.current) {
                 const inAltBuffer = this.termRef.current.terminal?.buffer?.active?.type === "alternate";
                 const lastCommand = get(this.termRef.current.lastCommandAtom);
                 const blockingCmd = getBlockingCommand(lastCommand, inAltBuffer);
                 if (blockingCmd) {
-                    title = `Wave AI integration disabled while you're inside ${blockingCmd}.`;
+                    title = tCurrent("Wave AI integration disabled while you're inside {{command}}.", {
+                        command: blockingCmd,
+                    });
                 }
             }
 
@@ -455,7 +460,7 @@ export class TermViewModel implements ViewModel {
                 elemtype: "iconbutton",
                 icon: "microchip",
                 iconColor: "var(--error-color)",
-                title: "WebGL not supported",
+                title: tCurrent("WebGL not supported"),
                 noAction: true,
             };
         }
@@ -468,7 +473,7 @@ export class TermViewModel implements ViewModel {
                 elemtype: "iconbutton",
                 icon: "microchip",
                 iconColor: "var(--success-color)",
-                title: "WebGL enabled (click to disable)",
+                title: tCurrent("WebGL enabled (click to disable)"),
                 click: () => this.toggleWebGl(),
             };
         }
@@ -476,7 +481,7 @@ export class TermViewModel implements ViewModel {
             elemtype: "iconbutton",
             icon: "microchip",
             iconColor: "var(--secondary-text-color)",
-            title: "WebGL disabled (click to enable)",
+            title: tCurrent("WebGL disabled (click to enable)"),
             click: () => this.toggleWebGl(),
         };
     }
@@ -829,7 +834,7 @@ export class TermViewModel implements ViewModel {
 
         if (hasSelection) {
             menu.push({
-                label: "Copy",
+                label: tCurrent("Copy"),
                 click: () => {
                     if (selection) {
                         const text =
@@ -842,7 +847,7 @@ export class TermViewModel implements ViewModel {
             });
             menu.push({ type: "separator" });
             menu.push({
-                label: "Send to Wave AI",
+                label: tCurrent("Send to Wave AI"),
                 click: () => {
                     if (selection) {
                         const aiModel = WaveAIModel.getInstance();
@@ -869,7 +874,9 @@ export class TermViewModel implements ViewModel {
             }
             if (hoveredURL) {
                 menu.push({
-                    label: hoveredURL.hostname ? "Open URL (" + hoveredURL.hostname + ")" : "Open URL",
+                    label: hoveredURL.hostname
+                        ? tCurrent("Open URL") + " (" + hoveredURL.hostname + ")"
+                        : tCurrent("Open URL"),
                     click: () => {
                         createBlock({
                             meta: {
@@ -880,7 +887,7 @@ export class TermViewModel implements ViewModel {
                     },
                 });
                 menu.push({
-                    label: "Open URL in External Browser",
+                    label: tCurrent("Open URL in External Browser"),
                     click: () => {
                         getApi().openExternal(hoveredURL.toString());
                     },
@@ -890,7 +897,7 @@ export class TermViewModel implements ViewModel {
         }
 
         menu.push({
-            label: "Paste",
+            label: tCurrent("Paste"),
             click: () => {
                 getApi().nativePaste();
             },
@@ -900,7 +907,7 @@ export class TermViewModel implements ViewModel {
 
         const magnified = globalStore.get(this.nodeModel.isMagnified);
         menu.push({
-            label: magnified ? "Un-Magnify Block" : "Magnify Block",
+            label: tCurrent(magnified ? "Un-Magnify Block" : "Magnify Block"),
             click: () => {
                 this.nodeModel.toggleMagnify();
             },
@@ -937,7 +944,7 @@ export class TermViewModel implements ViewModel {
 
         const fullMenu: ContextMenuItem[] = [];
         fullMenu.push({
-            label: "Split Horizontally",
+            label: tCurrent("Split Horizontally"),
             click: () => {
                 const blockData = globalStore.get(this.blockAtom);
                 const blockDef: BlockDef = {
@@ -947,7 +954,7 @@ export class TermViewModel implements ViewModel {
             },
         });
         fullMenu.push({
-            label: "Split Vertically",
+            label: tCurrent("Split Vertically"),
             click: () => {
                 const blockData = globalStore.get(this.blockAtom);
                 const blockDef: BlockDef = {
@@ -964,7 +971,7 @@ export class TermViewModel implements ViewModel {
 
         if (canShowFileBrowser) {
             fullMenu.push({
-                label: "File Browser",
+                label: tCurrent("File Browser"),
                 click: () => {
                     const blockData = globalStore.get(this.blockAtom);
                     const connection = blockData?.meta?.connection;
@@ -984,7 +991,7 @@ export class TermViewModel implements ViewModel {
         }
 
         fullMenu.push({
-            label: "Save Session As...",
+            label: tCurrent("Save Session As..."),
             click: () => {
                 if (this.termRef.current) {
                     const content = this.termRef.current.getScrollbackContent();
@@ -1022,14 +1029,14 @@ export class TermViewModel implements ViewModel {
             };
         });
         submenu.unshift({
-            label: "Default",
+            label: tCurrent("Default"),
             type: "checkbox",
             checked: curThemeName == null,
             click: () => this.setTerminalTheme(null),
         });
         const transparencySubMenu: ContextMenuItem[] = [];
         transparencySubMenu.push({
-            label: "Default",
+            label: tCurrent("Default"),
             type: "checkbox",
             checked: transparencyMeta == null,
             click: () => {
@@ -1040,7 +1047,7 @@ export class TermViewModel implements ViewModel {
             },
         });
         transparencySubMenu.push({
-            label: "Transparent Background",
+            label: tCurrent("Transparent Background"),
             type: "checkbox",
             checked: transparencyMeta == 0.5,
             click: () => {
@@ -1051,7 +1058,7 @@ export class TermViewModel implements ViewModel {
             },
         });
         transparencySubMenu.push({
-            label: "No Transparency",
+            label: tCurrent("No Transparency"),
             type: "checkbox",
             checked: transparencyMeta == 0,
             click: () => {
@@ -1078,7 +1085,7 @@ export class TermViewModel implements ViewModel {
             }
         );
         fontSizeSubMenu.unshift({
-            label: "Default (" + defaultFontSize + "px)",
+            label: tCurrent("Default ({{size}}px)", { size: defaultFontSize }),
             type: "checkbox",
             checked: overrideFontSize == null,
             click: () => {
@@ -1096,7 +1103,7 @@ export class TermViewModel implements ViewModel {
         const effectiveCursorBlink = overrideCursorBlink === true;
         const cursorSubMenu: ContextMenuItem[] = [
             {
-                label: "Default",
+                label: tCurrent("Default"),
                 type: "checkbox",
                 checked: isCursorDefault,
                 click: () => {
@@ -1107,7 +1114,7 @@ export class TermViewModel implements ViewModel {
                 },
             },
             {
-                label: "Block",
+                label: tCurrent("Block"),
                 type: "checkbox",
                 checked: !isCursorDefault && effectiveCursor === "block" && !effectiveCursorBlink,
                 click: () => {
@@ -1118,7 +1125,7 @@ export class TermViewModel implements ViewModel {
                 },
             },
             {
-                label: "Block (Blinking)",
+                label: tCurrent("Block (Blinking)"),
                 type: "checkbox",
                 checked: !isCursorDefault && effectiveCursor === "block" && effectiveCursorBlink,
                 click: () => {
@@ -1129,7 +1136,7 @@ export class TermViewModel implements ViewModel {
                 },
             },
             {
-                label: "Bar",
+                label: tCurrent("Bar"),
                 type: "checkbox",
                 checked: !isCursorDefault && effectiveCursor === "bar" && !effectiveCursorBlink,
                 click: () => {
@@ -1140,7 +1147,7 @@ export class TermViewModel implements ViewModel {
                 },
             },
             {
-                label: "Bar (Blinking)",
+                label: tCurrent("Bar (Blinking)"),
                 type: "checkbox",
                 checked: !isCursorDefault && effectiveCursor === "bar" && effectiveCursorBlink,
                 click: () => {
@@ -1151,7 +1158,7 @@ export class TermViewModel implements ViewModel {
                 },
             },
             {
-                label: "Underline",
+                label: tCurrent("Underline"),
                 type: "checkbox",
                 checked: !isCursorDefault && effectiveCursor === "underline" && !effectiveCursorBlink,
                 click: () => {
@@ -1162,7 +1169,7 @@ export class TermViewModel implements ViewModel {
                 },
             },
             {
-                label: "Underline (Blinking)",
+                label: tCurrent("Underline (Blinking)"),
                 type: "checkbox",
                 checked: !isCursorDefault && effectiveCursor === "underline" && effectiveCursorBlink,
                 click: () => {
@@ -1174,29 +1181,31 @@ export class TermViewModel implements ViewModel {
             },
         ];
         fullMenu.push({
-            label: "Themes",
+            label: tCurrent("Themes"),
             submenu: submenu,
         });
         fullMenu.push({
-            label: "Font Size",
+            label: tCurrent("Font Size"),
             submenu: fontSizeSubMenu,
         });
         fullMenu.push({
-            label: "Cursor",
+            label: tCurrent("Cursor"),
             submenu: cursorSubMenu,
         });
         fullMenu.push({
-            label: "Transparency",
+            label: tCurrent("Transparency"),
             submenu: transparencySubMenu,
         });
         fullMenu.push({ type: "separator" });
         const advancedSubmenu: ContextMenuItem[] = [];
         const allowBracketedPaste = blockData?.meta?.["term:allowbracketedpaste"];
         advancedSubmenu.push({
-            label: "Allow Bracketed Paste Mode",
+            label: tCurrent("Allow Bracketed Paste Mode"),
             submenu: [
                 {
-                    label: "Default (" + (defaultAllowBracketedPaste ? "On" : "Off") + ")",
+                    label: tCurrent("Default ({{state}})", {
+                        state: tCurrent(defaultAllowBracketedPaste ? "On" : "Off"),
+                    }),
                     type: "checkbox",
                     checked: allowBracketedPaste == null,
                     click: () => {
@@ -1207,7 +1216,7 @@ export class TermViewModel implements ViewModel {
                     },
                 },
                 {
-                    label: "On",
+                    label: tCurrent("On"),
                     type: "checkbox",
                     checked: allowBracketedPaste === true,
                     click: () => {
@@ -1218,7 +1227,7 @@ export class TermViewModel implements ViewModel {
                     },
                 },
                 {
-                    label: "Off",
+                    label: tCurrent("Off"),
                     type: "checkbox",
                     checked: allowBracketedPaste === false,
                     click: () => {
@@ -1231,15 +1240,15 @@ export class TermViewModel implements ViewModel {
             ],
         });
         advancedSubmenu.push({
-            label: "Force Restart Controller",
+            label: tCurrent("Force Restart Controller"),
             click: () => fireAndForget(() => this.forceRestartController()),
         });
         const isClearOnStart = blockData?.meta?.["cmd:clearonstart"];
         advancedSubmenu.push({
-            label: "Clear Output On Restart",
+            label: tCurrent("Clear Output On Restart"),
             submenu: [
                 {
-                    label: "On",
+                    label: tCurrent("On"),
                     type: "checkbox",
                     checked: isClearOnStart,
                     click: () => {
@@ -1250,7 +1259,7 @@ export class TermViewModel implements ViewModel {
                     },
                 },
                 {
-                    label: "Off",
+                    label: tCurrent("Off"),
                     type: "checkbox",
                     checked: !isClearOnStart,
                     click: () => {
@@ -1264,10 +1273,10 @@ export class TermViewModel implements ViewModel {
         });
         const runOnStart = blockData?.meta?.["cmd:runonstart"];
         advancedSubmenu.push({
-            label: "Run On Startup",
+            label: tCurrent("Run On Startup"),
             submenu: [
                 {
-                    label: "On",
+                    label: tCurrent("On"),
                     type: "checkbox",
                     checked: runOnStart,
                     click: () => {
@@ -1278,7 +1287,7 @@ export class TermViewModel implements ViewModel {
                     },
                 },
                 {
-                    label: "Off",
+                    label: tCurrent("Off"),
                     type: "checkbox",
                     checked: !runOnStart,
                     click: () => {
@@ -1292,10 +1301,10 @@ export class TermViewModel implements ViewModel {
         });
         const debugConn = blockData?.meta?.["term:conndebug"];
         advancedSubmenu.push({
-            label: "Debug Connection",
+            label: tCurrent("Debug Connection"),
             submenu: [
                 {
-                    label: "Off",
+                    label: tCurrent("Off"),
                     type: "checkbox",
                     checked: !debugConn,
                     click: () => {
@@ -1306,7 +1315,7 @@ export class TermViewModel implements ViewModel {
                     },
                 },
                 {
-                    label: "Info",
+                    label: tCurrent("Info"),
                     type: "checkbox",
                     checked: debugConn == "info",
                     click: () => {
@@ -1317,7 +1326,7 @@ export class TermViewModel implements ViewModel {
                     },
                 },
                 {
-                    label: "Verbose",
+                    label: tCurrent("Verbose"),
                     type: "checkbox",
                     checked: debugConn == "debug",
                     click: () => {
@@ -1333,20 +1342,20 @@ export class TermViewModel implements ViewModel {
         const isDurable = globalStore.get(getBlockTermDurableAtom(this.blockId));
         if (isDurable) {
             advancedSubmenu.push({
-                label: "Session Durability",
+                label: tCurrent("Session Durability"),
                 submenu: [
                     {
-                        label: "Restart Session in Standard Mode",
+                        label: tCurrent("Restart Session in Standard Mode"),
                         click: () => fireAndForget(() => this.restartSessionWithDurability(false)),
                     },
                 ],
             });
         } else if (isDurable === false) {
             advancedSubmenu.push({
-                label: "Session Durability",
+                label: tCurrent("Session Durability"),
                 submenu: [
                     {
-                        label: "Restart Session in Durable Mode",
+                        label: tCurrent("Restart Session in Durable Mode"),
                         click: () => fireAndForget(() => this.restartSessionWithDurability(true)),
                     },
                 ],
@@ -1354,13 +1363,13 @@ export class TermViewModel implements ViewModel {
         }
 
         fullMenu.push({
-            label: "Advanced",
+            label: tCurrent("Advanced"),
             submenu: advancedSubmenu,
         });
         if (blockData?.meta?.["term:vdomtoolbarblockid"]) {
             fullMenu.push({ type: "separator" });
             fullMenu.push({
-                label: "Close Toolbar",
+                label: tCurrent("Close Toolbar"),
                 click: () => {
                     RpcApi.DeleteSubBlockCommand(TabRpcClient, { blockid: blockData.meta["term:vdomtoolbarblockid"] });
                 },

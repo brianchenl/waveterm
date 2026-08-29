@@ -37,6 +37,8 @@ Wave AI now supports provider-based configuration which automatically applies se
 - **`nanogpt`** - NanoGPT API (automatically configures endpoint and secret name) [[see example](#nanogpt)]
 - **`groq`** - Groq API (automatically configures endpoint and secret name) [[see example](#groq)]
 - **`google`** - Google AI (Gemini) [[see example](#google-ai-gemini)]
+- **`deepseek`** - DeepSeek API with native thinking and reasoning effort controls [[see example](#deepseek)]
+- **`kimi`** - Kimi Code Plan membership API with coding models, preserved thinking, and reasoning effort controls [[see example](#kimi-code-plan)]
 - **`azure`** - Azure OpenAI Service (modern API) [[see example](#azure-openai-modern-api)]
 - **`azure-legacy`** - Azure OpenAI Service (legacy deployment API) [[see example](#azure-openai-legacy-deployment-api)]
 - **`custom`** - Custom API endpoint (fully manual configuration) [[see examples](#local-model-examples)]
@@ -319,6 +321,83 @@ The provider automatically sets:
 For Groq, you must manually specify `ai:capabilities` based on your model's features.
 :::
 
+### DeepSeek
+
+The `deepseek` provider uses the official Chat Completions endpoint and supports DeepSeek's native `thinking` and `reasoning_effort` request fields:
+
+```json
+{
+  "deepseek-pro": {
+    "display:name": "DeepSeek V4 Pro",
+    "display:order": 10,
+    "display:icon": "brain",
+    "ai:provider": "deepseek",
+    "ai:model": "deepseek-v4-pro",
+    "ai:thinking": { "type": "enabled" },
+    "ai:reasoningeffort": "max"
+  },
+  "deepseek-flash": {
+    "display:name": "DeepSeek V4 Flash",
+    "display:order": 11,
+    "display:icon": "bolt",
+    "ai:provider": "deepseek",
+    "ai:model": "deepseek-v4-flash",
+    "ai:thinking": { "type": "disabled" }
+  }
+}
+```
+
+The provider automatically sets:
+- `ai:endpoint` to `https://api.deepseek.com/chat/completions`
+- `ai:apitype` to `openai-chat`
+- `ai:apitokensecretname` to `DEEPSEEK_KEY`
+- `ai:capabilities` to `["tools"]`
+
+Store the key with `wsh secret set DEEPSEEK_KEY=...`. `ai:thinking.type` accepts `enabled` or `disabled`; `ai:reasoningeffort` accepts `low`, `high`, or `max`.
+
+### Kimi Code Plan
+
+The `kimi` provider connects to the Kimi Code Plan membership API. Create a dedicated key in the Kimi Code Console; Kimi Platform pay-as-you-go keys are not interchangeable with Kimi Code Plan keys.
+
+```json
+{
+  "kimi-code": {
+    "display:name": "Kimi Code",
+    "display:order": 20,
+    "display:icon": "moon",
+    "ai:provider": "kimi",
+    "ai:model": "kimi-for-coding"
+  },
+  "kimi-k3-256k": {
+    "display:name": "Kimi K3 256K",
+    "display:order": 21,
+    "display:icon": "moon",
+    "ai:provider": "kimi",
+    "ai:model": "k3-256k",
+    "ai:reasoningeffort": "high"
+  }
+}
+```
+
+The provider automatically sets:
+- `ai:endpoint` to `https://api.kimi.com/coding/v1/chat/completions`
+- `ai:apitype` to `openai-chat`
+- `ai:apitokensecretname` to `KIMI_CODE_KEY`
+- `ai:thinking` to `{ "type": "enabled", "keep": "all" }`
+- `ai:capabilities` to `["tools", "images"]`
+- model switching compatibility between configured Kimi modes
+
+Store the Kimi Code Plan key with `wsh secret set KIMI_CODE_KEY=...`. Model availability depends on the membership tier:
+
+| Model | Availability | Context | `ai:reasoningeffort` |
+|---|---|---|---|
+| `kimi-for-coding` | All Kimi Code members | 256K | Omit |
+| `k3-256k` | Moderato and above | 256K | `low`, `high`, or `max` |
+| `k3` | Moderato and above | Up to 1M by plan | `low`, `high`, or `max` |
+| `kimi-for-coding-highspeed` | Allegretto and above | 256K | Omit |
+
+Kimi Code models require thinking to remain enabled. The provider preserves `reasoning_content` between turns and sends Wave Terminal's real client identity as required by the Kimi Code usage policy.
+
 ### Google AI (Gemini)
 
 [Google AI](https://ai.google.dev) provides the Gemini family of models. Using the `google` provider simplifies configuration:
@@ -455,9 +534,25 @@ You can define multiple AI modes and switch between them easily:
     "display:order": 10,
     "ai:provider": "openai",
     "ai:model": "gpt-4o"
+  },
+  "deepseek-v4-pro": {
+    "display:name": "DeepSeek V4 Pro",
+    "display:order": 20,
+    "ai:provider": "deepseek",
+    "ai:model": "deepseek-v4-pro",
+    "ai:thinking": { "type": "enabled" },
+    "ai:reasoningeffort": "high"
+  },
+  "kimi-code": {
+    "display:name": "Kimi Code",
+    "display:order": 21,
+    "ai:provider": "kimi",
+    "ai:model": "kimi-for-coding"
   }
 }
 ```
+
+Modes from the same direct provider can be switched inside an existing chat. Switching between incompatible providers starts with the **New Chat** action so provider-specific reasoning history is not mixed.
 
 ## Troubleshooting
 
@@ -513,6 +608,8 @@ If you get "model not found" errors:
     "ai:apitype": "openai-chat",
     "ai:model": "model-name",
     "ai:thinkinglevel": "medium",
+    "ai:thinking": { "type": "enabled", "keep": "all" },
+    "ai:reasoningeffort": "high",
     "ai:endpoint": "http://localhost:11434/v1/chat/completions",
     "ai:azureapiversion": "v1",
     "ai:apitoken": "your-token",
@@ -532,10 +629,12 @@ If you get "model not found" errors:
 | `display:order` | No | Sort order in the selector (lower numbers first) |
 | `display:icon` | No | Icon identifier for the mode (can use any [FontAwesome icon](https://fontawesome.com/search), use the name without the "fa-" prefix).  Default is "sparkles" |
 | `display:description` | No | Full description of the mode |
-| `ai:provider` | No | Provider preset: `openai`, `openrouter`, `nanogpt`, `groq`, `google`, `azure`, `azure-legacy`, `custom` |
+| `ai:provider` | No | Provider preset: `openai`, `openrouter`, `nanogpt`, `groq`, `google`, `deepseek`, `kimi`, `azure`, `azure-legacy`, `custom` |
 | `ai:apitype` | No | API type: `openai-chat`, `openai-responses`, or `google-gemini` (defaults to `openai-chat` if not specified) |
 | `ai:model` | No | Model identifier (required for most providers) |
 | `ai:thinkinglevel` | No | Thinking level: `low`, `medium`, or `high` |
+| `ai:thinking` | No | Native Chat Completions thinking object: `type` is `enabled` or `disabled`; optional `keep` is `all` |
+| `ai:reasoningeffort` | No | Native Chat Completions reasoning effort: `low`, `high`, or `max` |
 | `ai:endpoint` | No | *Full* API endpoint URL (auto-set by provider when available) |
 | `ai:azureapiversion` | No | Azure API version (for `azure-legacy` provider, defaults to `2025-04-01-preview`) |
 | `ai:apitoken` | No | API key/token (not recommended - use secrets instead) |

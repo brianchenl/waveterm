@@ -24,6 +24,12 @@ export class RpcApiType {
         return client.wshRpcCall("activity", data, opts);
     }
 
+    // command "aiprovidertest" [call]
+    AIProviderTestCommand(client: WshClient, data: CommandAIProviderTestData, opts?: RpcOpts): Promise<CommandAIProviderTestRtnData> {
+        if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "aiprovidertest", data, opts);
+        return client.wshRpcCall("aiprovidertest", data, opts);
+    }
+
     // command "aisendmessage" [call]
     AiSendMessageCommand(client: WshClient, data: AiMessageData, opts?: RpcOpts): Promise<void> {
         if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "aisendmessage", data, opts);
@@ -1024,6 +1030,12 @@ export class RpcApiType {
     WebSelectorCommand(client: WshClient, data: CommandWebSelectorData, opts?: RpcOpts): Promise<string[]> {
         if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "webselector", data, opts);
         return client.wshRpcCall("webselector", data, opts);
+    }
+
+    // command "windowsdiagnostics" [call]
+    WindowsDiagnosticsCommand(client: WshClient, data: CommandWindowsDiagnosticsData, opts?: RpcOpts): Promise<CommandWindowsDiagnosticsRtnData> {
+        if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "windowsdiagnostics", data, opts);
+        return client.wshRpcCall("windowsdiagnostics", data, opts);
     }
 
     // command "workspacelist" [call]

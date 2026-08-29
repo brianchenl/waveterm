@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { computeConnColorNum } from "@/app/block/blockutil";
+import { tCurrent } from "@/app/i18n/current-i18n";
 import { TypeAheadModal } from "@/app/modals/typeaheadmodal";
 import { ConnectionsModel } from "@/app/store/connections-model";
 import {
@@ -238,8 +239,8 @@ function getConnectionsEditItem(
         status: "disconnected",
         icon: "gear",
         iconColor: "var(--grey-text-color)",
-        value: "Edit Connections",
-        label: "Edit Connections",
+        value: tCurrent("Edit Connections"),
+        label: tCurrent("Edit Connections"),
         onSelect: () => {
             util.fireAndForget(async () => {
                 globalStore.set(changeConnModalAtom, false);

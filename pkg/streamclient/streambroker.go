@@ -16,6 +16,11 @@ type workItem struct {
 	dataPk   wshrpc.CommandStreamData
 }
 
+const (
+	maxReaderErrorEntries = 1024
+	readerErrorEntryTTL   = time.Minute
+)
+
 type StreamWriter interface {
 	RecvAck(ackPk wshrpc.CommandStreamAckData)
 }
@@ -33,6 +38,7 @@ type Broker struct {
 	readerRoutes        map[string]string
 	writerRoutes        map[string]string
 	readerErrorSentTime map[string]time.Time
+	lastErrorMapCleanup time.Time
 	sendQueue           *utilds.WorkQueue[workItem]
 	recvQueue           *utilds.WorkQueue[workItem]
 }
@@ -68,7 +74,7 @@ func (b *Broker) CreateStreamReaderWithSeq(readerRoute string, writerRoute strin
 
 	meta := &wshrpc.StreamMeta{
 		Id:            streamId,
-		RWnd:          rwnd,
+		RWnd:          reader.readWindow,
 		ReaderRouteId: readerRoute,
 		WriterRouteId: writerRoute,
 	}
@@ -117,14 +123,19 @@ func (b *Broker) SendData(dataPk wshrpc.CommandStreamData) {
 }
 
 // RecvData and RecvAck are designed to be non-blocking and must remain so to prevent deadlock.
-// They only enqueue work items to be processed asynchronously by the work queue's goroutine.
+// They enqueue work items to be processed asynchronously by the work queue's goroutine.
+// If the bounded queue is saturated, the affected stream is failed immediately.
 // These methods are called from the main RPC runServer loop, so blocking here would stall all RPC processing.
 func (b *Broker) RecvData(dataPk wshrpc.CommandStreamData) {
-	b.recvQueue.Enqueue(workItem{workType: "recvdata", dataPk: dataPk})
+	if !b.recvQueue.Enqueue(workItem{workType: "recvdata", dataPk: dataPk}) {
+		b.processRecvData(wshrpc.CommandStreamData{Id: dataPk.Id, Error: "stream receive queue full"})
+	}
 }
 
 func (b *Broker) RecvAck(ackPk wshrpc.CommandStreamAckData) {
-	b.recvQueue.Enqueue(workItem{workType: "recvack", ackPk: ackPk})
+	if !b.recvQueue.Enqueue(workItem{workType: "recvack", ackPk: ackPk}) {
+		b.processRecvAck(wshrpc.CommandStreamAckData{Id: ackPk.Id, Cancel: true, Error: "stream receive queue full"})
+	}
 }
 
 func (b *Broker) processSendWork(item workItem) {
@@ -186,7 +197,17 @@ func (b *Broker) processRecvData(dataPk wshrpc.CommandStreamData) {
 			b.lock.Unlock()
 			return
 		}
-		b.readerErrorSentTime[dataPk.Id] = now
+		if now.Sub(b.lastErrorMapCleanup) >= readerErrorEntryTTL {
+			for streamId, sentAt := range b.readerErrorSentTime {
+				if now.Sub(sentAt) >= readerErrorEntryTTL {
+					delete(b.readerErrorSentTime, streamId)
+				}
+			}
+			b.lastErrorMapCleanup = now
+		}
+		if len(b.readerErrorSentTime) < maxReaderErrorEntries {
+			b.readerErrorSentTime[dataPk.Id] = now
+		}
 	}
 	b.lock.Unlock()
 

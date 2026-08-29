@@ -6,35 +6,35 @@
 @source "../node_modules/streamdown/dist/index.js";
 
 @theme {
-    --color-background: rgb(34, 34, 34);
-    --color-foreground: #f7f7f7;
-    --color-white: #f7f7f7;
-    --color-primary: #f7f7f7;
-    --color-muted-foreground: rgb(195, 200, 194);
-    --color-secondary: rgb(195, 200, 194);
-    --color-muted: rgb(140, 145, 140);
-    --color-accent-50: rgb(236, 253, 232);
-    --color-accent-100: rgb(209, 250, 202);
-    --color-accent-200: rgb(167, 243, 168);
-    --color-accent-300: rgb(110, 231, 133);
-    --color-accent-400: rgb(88, 193, 66); /* main accent color */
-    --color-accent-500: rgb(63, 162, 51);
-    --color-accent-600: rgb(47, 133, 47);
-    --color-accent-700: rgb(34, 104, 43);
-    --color-accent-800: rgb(22, 81, 35);
-    --color-accent-900: rgb(15, 61, 29);
+    --color-background: #090806;
+    --color-foreground: #e9e2d0;
+    --color-white: #e9e2d0;
+    --color-primary: #e9e2d0;
+    --color-muted-foreground: #b8ad96;
+    --color-secondary: #b8ad96;
+    --color-muted: #8f846f;
+    --color-accent-50: #fbf7ed;
+    --color-accent-100: #f4e8c9;
+    --color-accent-200: #e7d09b;
+    --color-accent-300: #d4b76d;
+    --color-accent-400: #b08a3e; /* main accent color */
+    --color-accent-500: #96712f;
+    --color-accent-600: #7b5a25;
+    --color-accent-700: #60451e;
+    --color-accent-800: #493619;
+    --color-accent-900: #332613;
     --color-error: rgb(229, 77, 46);
-    --color-warning: rgb(224, 185, 86);
-    --color-success: rgb(78, 154, 6);
-    --color-panel: rgba(31, 33, 31, 0.5);
-    --color-hover: rgba(255, 255, 255, 0.1);
-    --color-border: rgba(255, 255, 255, 0.16);
-    --color-modalbg: #232323;
-    --color-accentbg: rgba(88, 193, 66, 0.5);
-    --color-hoverbg: rgba(255, 255, 255, 0.2);
-    --color-highlightbg: rgba(255, 255, 255, 0.2);
-    --color-accent: rgb(88, 193, 66);
-    --color-accenthover: rgb(118, 223, 96);
+    --color-warning: #d4aa55;
+    --color-success: #78a26e;
+    --color-panel: rgba(17, 15, 12, 0.82);
+    --color-hover: rgba(176, 138, 62, 0.12);
+    --color-border: rgba(198, 161, 91, 0.24);
+    --color-modalbg: #12100d;
+    --color-accentbg: rgba(176, 138, 62, 0.5);
+    --color-hoverbg: rgba(176, 138, 62, 0.2);
+    --color-highlightbg: rgba(176, 138, 62, 0.2);
+    --color-accent: #b08a3e;
+    --color-accenthover: #c6a15b;
 
     --font-sans: "Inter", sans-serif;
     --font-mono: "Hack", monospace;
@@ -99,13 +99,13 @@ svg [aria-label="tip"] g path {
 
 /* Monaco editor scrollbar styling */
 .monaco-editor .slider {
-    background: rgba(255, 255, 255, 0.4);
+    background: rgba(176, 138, 62, 0.4);
     border-radius: 4px;
     transition: background 0.2s ease;
 }
 
 .monaco-editor .slider:hover {
-    background: rgba(255, 255, 255, 0.6);
+    background: rgba(198, 161, 91, 0.65);
 }
 
 .ellipsis {

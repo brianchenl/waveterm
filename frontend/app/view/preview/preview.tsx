@@ -1,6 +1,7 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { lazyWithRetry } from "@/app/element/lazy-module";
 import { CenteredDiv } from "@/app/element/quickelems";
 import { globalStore } from "@/app/store/jotaiStore";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
@@ -9,21 +10,34 @@ import { useWaveEnv } from "@/app/waveenv/waveenv";
 import { isBlank, makeConnRoute } from "@/util/util";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { memo, useEffect } from "react";
-import { CSVView } from "./csvview";
-import { DirectoryPreview } from "./preview-directory";
-import { CodeEditPreview } from "./preview-edit";
 import { ErrorOverlay } from "./preview-error-overlay";
-import { MarkdownPreview } from "./preview-markdown";
 import type { PreviewModel } from "./preview-model";
-import { StreamingPreview } from "./preview-streaming";
 import type { PreviewEnv } from "./previewenv";
+
+const CSVView = lazyWithRetry(() => import("./csvview").then((module) => ({ default: module.CSVView })), "CSV preview");
+const DirectoryPreview = lazyWithRetry(
+    () => import("./preview-directory").then((module) => ({ default: module.DirectoryPreview })),
+    "directory preview"
+);
+const CodeEditPreview = lazyWithRetry(
+    () => import("./preview-edit").then((module) => ({ default: module.CodeEditPreview })),
+    "file editor"
+);
+const MarkdownPreview = lazyWithRetry(
+    () => import("./preview-markdown").then((module) => ({ default: module.MarkdownPreview })),
+    "Markdown preview"
+);
+const StreamingPreview = lazyWithRetry(
+    () => import("./preview-streaming").then((module) => ({ default: module.StreamingPreview })),
+    "streaming preview"
+);
 
 export type SpecializedViewProps = {
     model: PreviewModel;
     parentRef: React.RefObject<HTMLDivElement>;
 };
 
-const SpecializedViewMap: { [view: string]: ({ model }: SpecializedViewProps) => React.JSX.Element } = {
+const SpecializedViewMap: { [view: string]: React.ComponentType<SpecializedViewProps> } = {
     streaming: StreamingPreview,
     markdown: MarkdownPreview,
     codeedit: CodeEditPreview,

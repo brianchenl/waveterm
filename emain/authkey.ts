@@ -3,12 +3,15 @@
 
 import { ipcMain } from "electron";
 import { getWebServerEndpoint, getWSServerEndpoint } from "../frontend/util/endpoints";
+import { createSecureIpcRegistrar, isNonWebviewIpcSender } from "./emain-ipc-guard";
 
 const AuthKeyHeader = "X-AuthKey";
 export const WaveAuthKeyEnv = "WAVETERM_AUTH_KEY";
 export const AuthKey = crypto.randomUUID();
 
-ipcMain.on("get-auth-key", (event) => {
+const authIpc = createSecureIpcRegistrar(ipcMain, isNonWebviewIpcSender);
+
+authIpc.on("get-auth-key", (event) => {
     event.returnValue = AuthKey;
 });
 

@@ -2,17 +2,35 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { BlockNodeModel } from "@/app/block/blocktypes";
+import { lazyWithRetry } from "@/app/element/lazy-module";
+import { resolveLocale, translate } from "@/app/i18n/i18n";
 import { globalStore } from "@/app/store/jotaiStore";
 import type { TabModel } from "@/app/store/tab-model";
 import { makeORef } from "@/app/store/wos";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { SecretsContent } from "@/app/view/waveconfig/secretscontent";
-import { WaveConfigView } from "@/app/view/waveconfig/waveconfig";
 import type { WaveConfigEnv } from "@/app/view/waveconfig/waveconfigenv";
 import { base64ToString, stringToBase64 } from "@/util/util";
 import { atom, type Atom, type PrimitiveAtom } from "jotai";
 import type * as MonacoTypes from "monaco-editor";
 import * as React from "react";
+
+const GeneralSettingsContent = lazyWithRetry(
+    () =>
+        import("@/app/view/waveconfig/generalsettings").then((module) => ({ default: module.GeneralSettingsContent })),
+    "General settings"
+);
+const SecretsContent = lazyWithRetry(
+    () => import("@/app/view/waveconfig/secretscontent").then((module) => ({ default: module.SecretsContent })),
+    "Secrets settings"
+);
+const WaveConfigView = lazyWithRetry(
+    () => import("@/app/view/waveconfig/waveconfig").then((module) => ({ default: module.WaveConfigView })),
+    "Wave settings"
+);
+const WindowsSetupContent = lazyWithRetry(
+    () => import("@/app/view/waveconfig/windowssetup").then((module) => ({ default: module.WindowsSetupContent })),
+    "Windows setup"
+);
 
 type ValidationResult = { success: true } | { error: string };
 type ConfigValidator = (parsed: any) => ValidationResult;
@@ -22,10 +40,11 @@ export type ConfigFile = {
     path: string;
     language?: string;
     deprecated?: boolean;
-    description?: string;
+    descriptionKey?: string;
     docsUrl?: string;
     validator?: ConfigValidator;
     isSecrets?: boolean;
+    isVirtual?: boolean;
     hasJsonView?: boolean;
     visualComponent?: React.ComponentType<{ model: WaveConfigViewModel }>;
 };
@@ -63,13 +82,26 @@ function makeConfigFiles(isWindows: boolean): ConfigFile[] {
             language: "json",
             docsUrl: "https://docs.waveterm.dev/config",
             hasJsonView: true,
+            visualComponent: GeneralSettingsContent,
         },
+        ...(isWindows
+            ? [
+                  {
+                      name: "Windows Setup",
+                      path: "windows-setup",
+                      descriptionKey: "SSH, Shell, and AI diagnostics",
+                      isVirtual: true,
+                      hasJsonView: false,
+                      visualComponent: WindowsSetupContent,
+                  } satisfies ConfigFile,
+              ]
+            : []),
         {
             name: "Connections",
             path: "connections.json",
             language: "json",
             docsUrl: "https://docs.waveterm.dev/connections",
-            description: isWindows ? "SSH hosts and WSL distros" : "SSH hosts",
+            descriptionKey: isWindows ? "SSH hosts and WSL distros" : "SSH hosts",
             hasJsonView: true,
         },
         {
@@ -83,7 +115,7 @@ function makeConfigFiles(isWindows: boolean): ConfigFile[] {
             name: "Wave AI Modes",
             path: "waveai.json",
             language: "json",
-            description: "Local models and BYOK",
+            descriptionKey: "Local models and BYOK",
             docsUrl: "https://docs.waveterm.dev/waveai-modes",
             validator: validateWaveAiJson,
             hasJsonView: true,
@@ -129,7 +161,7 @@ export class WaveConfigViewModel implements ViewModel {
     blockId: string;
     viewType = "waveconfig";
     viewIcon = atom("gear");
-    viewName = atom("Wave Config");
+    viewName: Atom<string> = atom("Wave Config");
     viewComponent = WaveConfigView;
     noPadding = atom(true);
     nodeModel: BlockNodeModel;
@@ -167,6 +199,9 @@ export class WaveConfigViewModel implements ViewModel {
         this.nodeModel = nodeModel;
         this.tabModel = tabModel;
         this.env = waveEnv as WaveConfigEnv;
+        this.viewName = atom((get) =>
+            translate(resolveLocale(get(this.env.getSettingsKeyAtom("app:language"))), "Wave Config")
+        );
         this.configDir = this.env.electron.getConfigDir();
         const platform = this.env.electron.getPlatform();
         this.saveShortcut = platform === "darwin" ? "Cmd+S" : "Alt+S";
@@ -267,7 +302,8 @@ export class WaveConfigViewModel implements ViewModel {
         if (!this.hasChanges()) {
             return true;
         }
-        return window.confirm("You have unsaved changes. Discard and continue?");
+        const language = globalStore.get(this.env.getSettingsKeyAtom("app:language"));
+        return window.confirm(translate(resolveLocale(language), "You have unsaved changes. Discard and continue?"));
     }
 
     discardChanges() {
@@ -287,15 +323,17 @@ export class WaveConfigViewModel implements ViewModel {
         globalStore.set(this.errorMessageAtom, null);
         globalStore.set(this.hasEditedAtom, false);
 
-        if (file.isSecrets) {
+        if (file.isSecrets || file.isVirtual) {
             globalStore.set(this.selectedFileAtom, file);
             this.env.rpc.SetMetaCommand(TabRpcClient, {
                 oref: makeORef("block", this.blockId),
                 meta: { file: file.path },
             });
             globalStore.set(this.isLoadingAtom, false);
-            this.checkStorageBackend();
-            this.refreshSecrets();
+            if (file.isSecrets) {
+                this.checkStorageBackend();
+                this.refreshSecrets();
+            }
             return;
         }
 

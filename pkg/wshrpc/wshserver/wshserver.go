@@ -51,6 +51,7 @@ import (
 	"github.com/wavetermdev/waveterm/pkg/wcloud"
 	"github.com/wavetermdev/waveterm/pkg/wconfig"
 	"github.com/wavetermdev/waveterm/pkg/wcore"
+	"github.com/wavetermdev/waveterm/pkg/windowssetup"
 	"github.com/wavetermdev/waveterm/pkg/wps"
 	"github.com/wavetermdev/waveterm/pkg/wshrpc"
 	"github.com/wavetermdev/waveterm/pkg/wshutil"
@@ -725,6 +726,14 @@ func (ws *WshServer) ConnUpdateWshCommand(ctx context.Context, remoteInfo wshrpc
 
 func (ws *WshServer) ConnListCommand(ctx context.Context) ([]string, error) {
 	return conncontroller.GetConnectionsList()
+}
+
+func (ws *WshServer) WindowsDiagnosticsCommand(ctx context.Context, data wshrpc.CommandWindowsDiagnosticsData) (*wshrpc.CommandWindowsDiagnosticsRtnData, error) {
+	return windowssetup.Diagnostics(data.SSHHost)
+}
+
+func (ws *WshServer) AIProviderTestCommand(ctx context.Context, data wshrpc.CommandAIProviderTestData) (*wshrpc.CommandAIProviderTestRtnData, error) {
+	return windowssetup.TestAIProvider(ctx, data)
 }
 
 func (ws *WshServer) WslListCommand(ctx context.Context) ([]string, error) {
@@ -1472,7 +1481,17 @@ func (ws *WshServer) GetAllBadgesCommand(ctx context.Context) ([]baseds.BadgeEve
 	return wcore.GetAllBadges(), nil
 }
 
+func requireRpcCapability(ctx context.Context, capability string) error {
+	if !wshutil.HasRpcCapability(ctx, capability) {
+		return fmt.Errorf("permission denied: missing RPC capability %q", capability)
+	}
+	return nil
+}
+
 func (ws *WshServer) GetSecretsCommand(ctx context.Context, names []string) (map[string]string, error) {
+	if err := requireRpcCapability(ctx, wshrpc.RpcCapabilitySecretRead); err != nil {
+		return nil, err
+	}
 	result := make(map[string]string)
 	for _, name := range names {
 		value, exists, err := secretstore.GetSecret(name)
@@ -1487,6 +1506,9 @@ func (ws *WshServer) GetSecretsCommand(ctx context.Context, names []string) (map
 }
 
 func (ws *WshServer) GetSecretsNamesCommand(ctx context.Context) ([]string, error) {
+	if err := requireRpcCapability(ctx, wshrpc.RpcCapabilitySecretRead); err != nil {
+		return nil, err
+	}
 	names, err := secretstore.GetSecretNames()
 	if err != nil {
 		return nil, fmt.Errorf("error getting secret names: %w", err)
@@ -1495,6 +1517,9 @@ func (ws *WshServer) GetSecretsNamesCommand(ctx context.Context) ([]string, erro
 }
 
 func (ws *WshServer) SetSecretsCommand(ctx context.Context, secrets map[string]*string) error {
+	if err := requireRpcCapability(ctx, wshrpc.RpcCapabilitySecretWrite); err != nil {
+		return err
+	}
 	for name, value := range secrets {
 		if value == nil {
 			err := secretstore.DeleteSecret(name)
@@ -1512,6 +1537,9 @@ func (ws *WshServer) SetSecretsCommand(ctx context.Context, secrets map[string]*
 }
 
 func (ws *WshServer) GetSecretsLinuxStorageBackendCommand(ctx context.Context) (string, error) {
+	if err := requireRpcCapability(ctx, wshrpc.RpcCapabilitySecretRead); err != nil {
+		return "", err
+	}
 	backend, err := secretstore.GetLinuxStorageBackend()
 	if err != nil {
 		return "", fmt.Errorf("error getting linux storage backend: %w", err)

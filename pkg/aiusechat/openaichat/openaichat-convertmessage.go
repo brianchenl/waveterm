@@ -104,6 +104,15 @@ func buildChatHTTPRequest(ctx context.Context, messages []ChatRequestMessage, ch
 		Messages: finalMessages,
 		Stream:   true,
 	}
+	if opts.ThinkingType != "" || opts.ThinkingKeep != "" {
+		reqBody.Thinking = &ThinkingConfig{
+			Type: opts.ThinkingType,
+			Keep: opts.ThinkingKeep,
+		}
+	}
+	if opts.ReasoningEffort != "" {
+		reqBody.ReasoningEffort = opts.ReasoningEffort
+	}
 
 	// Model is only added to request for non-azure-legacy providers
 	if opts.Provider != uctypes.AIProvider_AzureLegacy {
@@ -150,6 +159,9 @@ func buildChatHTTPRequest(ctx context.Context, messages []ChatRequestMessage, ch
 	}
 
 	req.Header.Set("Accept", "text/event-stream")
+	if opts.Provider == uctypes.AIProvider_Kimi {
+		req.Header.Set("User-Agent", "WaveTerminal/"+wavebase.WaveVersion)
+	}
 
 	// Only send Wave-specific headers when using Wave provider
 	if opts.Provider == uctypes.AIProvider_Wave {
@@ -365,6 +377,13 @@ func ConvertAIChatToUIChat(aiChat uctypes.AIChat) (*uctypes.UIChat, error) {
 		}
 
 		var parts []uctypes.UIMessagePart
+		if chatMsg.Message.ReasoningContent != "" {
+			parts = append(parts, uctypes.UIMessagePart{
+				Type:  "reasoning",
+				Text:  chatMsg.Message.ReasoningContent,
+				State: "done",
+			})
+		}
 
 		if len(chatMsg.Message.ContentParts) > 0 {
 			for _, cp := range chatMsg.Message.ContentParts {

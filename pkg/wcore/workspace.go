@@ -23,8 +23,10 @@ import (
 	"github.com/wavetermdev/waveterm/pkg/wstore"
 )
 
+const DefaultWorkspaceColor = "#B08A3E"
+
 var WorkspaceColors = [...]string{
-	"#58C142", // Green (accent)
+	DefaultWorkspaceColor, // Dark gold (accent)
 	"#00FFDB", // Teal
 	"#429DFF", // Blue
 	"#BF55EC", // Purple

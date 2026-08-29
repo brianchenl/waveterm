@@ -23,6 +23,8 @@ const (
 	OpenRouterChatEndpoint         = "https://openrouter.ai/api/v1/chat/completions"
 	NanoGPTChatEndpoint            = "https://nano-gpt.com/api/v1/chat/completions"
 	GroqChatEndpoint               = "https://api.groq.com/openai/v1/chat/completions"
+	DeepSeekChatEndpoint           = "https://api.deepseek.com/chat/completions"
+	KimiCodeChatEndpoint           = "https://api.kimi.com/coding/v1/chat/completions"
 	AzureLegacyEndpointTemplate    = "https://%s.openai.azure.com/openai/deployments/%s/chat/completions?api-version=%s"
 	AzureResponsesEndpointTemplate = "https://%s.openai.azure.com/openai/v1/responses"
 	AzureChatEndpointTemplate      = "https://%s.openai.azure.com/openai/v1/chat/completions"
@@ -34,6 +36,8 @@ const (
 	OpenRouterAPITokenSecretName  = "OPENROUTER_KEY"
 	NanoGPTAPITokenSecretName     = "NANOGPT_KEY"
 	GroqAPITokenSecretName        = "GROQ_KEY"
+	DeepSeekAPITokenSecretName    = "DEEPSEEK_KEY"
+	KimiCodeAPITokenSecretName    = "KIMI_CODE_KEY"
 	AzureOpenAIAPITokenSecretName = "AZURE_OPENAI_KEY"
 	GoogleAIAPITokenSecretName    = "GOOGLE_AI_KEY"
 )
@@ -123,6 +127,46 @@ func applyProviderDefaults(config *wconfig.AIModeConfigType) {
 		}
 		if config.APITokenSecretName == "" {
 			config.APITokenSecretName = GroqAPITokenSecretName
+		}
+	}
+	if config.Provider == uctypes.AIProvider_DeepSeek {
+		if config.APIType == "" {
+			config.APIType = uctypes.APIType_OpenAIChat
+		}
+		if config.Endpoint == "" {
+			config.Endpoint = DeepSeekChatEndpoint
+		}
+		if config.APITokenSecretName == "" {
+			config.APITokenSecretName = DeepSeekAPITokenSecretName
+		}
+		if len(config.Capabilities) == 0 {
+			config.Capabilities = []string{uctypes.AICapabilityTools}
+		}
+		if len(config.SwitchCompat) == 0 {
+			config.SwitchCompat = []string{"deepseek"}
+		}
+	}
+	if config.Provider == uctypes.AIProvider_Kimi {
+		if config.APIType == "" {
+			config.APIType = uctypes.APIType_OpenAIChat
+		}
+		if config.Endpoint == "" {
+			config.Endpoint = KimiCodeChatEndpoint
+		}
+		if config.APITokenSecretName == "" {
+			config.APITokenSecretName = KimiCodeAPITokenSecretName
+		}
+		if len(config.Capabilities) == 0 {
+			config.Capabilities = []string{uctypes.AICapabilityTools, uctypes.AICapabilityImages}
+		}
+		if config.Thinking == nil {
+			config.Thinking = &wconfig.AIThinkingConfigType{
+				Type: uctypes.ThinkingTypeEnabled,
+				Keep: uctypes.ThinkingKeepAll,
+			}
+		}
+		if len(config.SwitchCompat) == 0 {
+			config.SwitchCompat = []string{"kimi-code"}
 		}
 	}
 	if config.Provider == uctypes.AIProvider_AzureLegacy {

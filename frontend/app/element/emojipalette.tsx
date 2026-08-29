@@ -1,6 +1,7 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { useTranslation } from "@/app/i18n/use-i18n";
 import { type Placement } from "@floating-ui/react";
 import clsx from "clsx";
 import { memo, useState } from "react";
@@ -220,6 +221,7 @@ interface EmojiPaletteProps {
 }
 
 const EmojiPalette = memo(({ className, placement, onSelect }: EmojiPaletteProps) => {
+    const { t } = useTranslation();
     const [searchTerm, setSearchTerm] = useState("");
 
     const handleSearchChange = (val: string) => {
@@ -243,7 +245,7 @@ const EmojiPalette = memo(({ className, placement, onSelect }: EmojiPaletteProps
                         <InputLeftElement>
                             <i className="fa-sharp fa-solid fa-magnifying-glass"></i>
                         </InputLeftElement>
-                        <Input placeholder="Search emojis..." value={searchTerm} onChange={handleSearchChange} />
+                        <Input placeholder={t("Search emojis...")} value={searchTerm} onChange={handleSearchChange} />
                     </InputGroup>
                     <div className="emoji-grid">
                         {filteredEmojis.length > 0 ? (
@@ -253,7 +255,7 @@ const EmojiPalette = memo(({ className, placement, onSelect }: EmojiPaletteProps
                                 </Button>
                             ))
                         ) : (
-                            <div className="no-emojis">No emojis found</div>
+                            <div className="no-emojis">{t("No emojis found")}</div>
                         )}
                     </div>
                 </PopoverContent>

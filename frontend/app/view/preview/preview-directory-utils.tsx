@@ -1,6 +1,7 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { tCurrent } from "@/app/i18n/current-i18n";
 import { globalStore } from "@/app/store/jotaiStore";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { fireAndForget, isBlank } from "@/util/util";
@@ -157,10 +158,10 @@ export function makeDirectoryDefaultMenuItems(model: PreviewModel): ContextMenuI
     const showHiddenFiles = globalStore.get(model.showHiddenFiles) ?? true;
     return [
         {
-            label: "Directory Sort Order",
+            label: tCurrent("Directory Sort Order"),
             submenu: [
                 {
-                    label: "Name",
+                    label: tCurrent("Name"),
                     type: "checkbox",
                     checked: defaultSort === "name",
                     click: () =>
@@ -169,7 +170,7 @@ export function makeDirectoryDefaultMenuItems(model: PreviewModel): ContextMenuI
                         ),
                 },
                 {
-                    label: "Last Modified",
+                    label: tCurrent("Last Modified"),
                     type: "checkbox",
                     checked: defaultSort === "modtime",
                     click: () =>
@@ -180,10 +181,10 @@ export function makeDirectoryDefaultMenuItems(model: PreviewModel): ContextMenuI
             ],
         },
         {
-            label: "Show Hidden Files",
+            label: tCurrent("Show Hidden Files"),
             submenu: [
                 {
-                    label: "On",
+                    label: tCurrent("On"),
                     type: "checkbox",
                     checked: showHiddenFiles,
                     click: () => {
@@ -194,7 +195,7 @@ export function makeDirectoryDefaultMenuItems(model: PreviewModel): ContextMenuI
                     },
                 },
                 {
-                    label: "Off",
+                    label: tCurrent("Off"),
                     type: "checkbox",
                     checked: !showHiddenFiles,
                     click: () => {

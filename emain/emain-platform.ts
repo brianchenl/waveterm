@@ -9,6 +9,8 @@ import os from "os";
 import path from "path";
 import { WaveDevVarName, WaveDevViteVarName } from "../frontend/util/isdev";
 import * as keyutil from "../frontend/util/keyutil";
+import { setMainProcessLanguage, tMain } from "./emain-i18n";
+import { createSecureIpcRegistrar, isNonWebviewIpcSender } from "./emain-ipc-guard";
 
 // This is a little trick to ensure that Electron puts all its runtime data into a subdirectory to avoid conflicts with our own data.
 // On macOS, it will store to ~/Library/Application \Support/waveterm/electron
@@ -42,13 +44,16 @@ const WaveDataHomeVarName = "WAVETERM_DATA_HOME";
 const WaveHomeVarName = "WAVETERM_HOME";
 
 export function checkIfRunningUnderARM64Translation(fullConfig: FullConfigType) {
+    setMainProcessLanguage(fullConfig?.settings?.["app:language"]);
     if (!fullConfig.settings["app:dismissarchitecturewarning"] && app.runningUnderARM64Translation) {
         console.log("Running under ARM64 translation, alerting user");
         const dialogOpts: Electron.MessageBoxOptions = {
             type: "warning",
-            buttons: ["Dismiss", "Learn More"],
-            title: "Wave has detected a performance issue",
-            message: `Wave is running in ARM64 translation mode which may impact performance.\n\nRecommendation: Download the native ARM64 version from our website for optimal performance.`,
+            buttons: [tMain("Dismiss"), tMain("Learn More")],
+            title: tMain("Wave has detected a performance issue"),
+            message: tMain(
+                "Wave is running in ARM64 translation mode which may impact performance.\n\nRecommendation: Download the native ARM64 version from our website for optimal performance."
+            ),
         };
 
         const choice = dialog.showMessageBoxSync(null, dialogOpts);
@@ -180,29 +185,31 @@ function getWaveSrvCwd(): string {
     return getWaveDataDir();
 }
 
-ipcMain.on("get-is-dev", (event) => {
+const platformIpc = createSecureIpcRegistrar(ipcMain, isNonWebviewIpcSender);
+
+platformIpc.on("get-is-dev", (event) => {
     event.returnValue = isDev;
 });
-ipcMain.on("get-platform", (event, url) => {
+platformIpc.on("get-platform", (event) => {
     event.returnValue = unamePlatform;
 });
-ipcMain.on("get-user-name", (event) => {
+platformIpc.on("get-user-name", (event) => {
     const userInfo = os.userInfo();
     event.returnValue = userInfo.username;
 });
-ipcMain.on("get-host-name", (event) => {
+platformIpc.on("get-host-name", (event) => {
     event.returnValue = os.hostname();
 });
-ipcMain.on("get-webview-preload", (event) => {
+platformIpc.on("get-webview-preload", (event) => {
     event.returnValue = path.join(getElectronAppBasePath(), "preload", "preload-webview.cjs");
 });
-ipcMain.on("get-data-dir", (event) => {
+platformIpc.on("get-data-dir", (event) => {
     event.returnValue = getWaveDataDir();
 });
-ipcMain.on("get-config-dir", (event) => {
+platformIpc.on("get-config-dir", (event) => {
     event.returnValue = getWaveConfigDir();
 });
-ipcMain.on("get-home-dir", (event) => {
+platformIpc.on("get-home-dir", (event) => {
     event.returnValue = app.getPath("home");
 });
 

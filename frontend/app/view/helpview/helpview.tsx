@@ -1,6 +1,7 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { tCurrent } from "@/app/i18n/current-i18n";
 import { globalStore, WOS } from "@/app/store/global";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
@@ -43,7 +44,7 @@ class HelpViewModel extends WebViewModel {
         this.homepageUrl = atom(docsiteUrl);
         this.viewType = "help";
         this.viewIcon = atom("circle-question");
-        this.viewName = atom("Help");
+        this.viewName = atom(tCurrent("Help"));
     }
 
     setZoomFactor(factor: number | null) {
@@ -84,7 +85,7 @@ class HelpViewModel extends WebViewModel {
             };
         }
         zoomSubMenu.push({
-            label: "Reset",
+            label: tCurrent("Reset"),
             click: () => {
                 model.setZoomFactor(null);
             },
@@ -104,7 +105,7 @@ class HelpViewModel extends WebViewModel {
 
         return [
             {
-                label: this.webviewRef.current?.isDevToolsOpened() ? "Close DevTools" : "Open DevTools",
+                label: tCurrent(this.webviewRef.current?.isDevToolsOpened() ? "Close DevTools" : "Open DevTools"),
                 click: async () => {
                     if (this.webviewRef.current) {
                         if (this.webviewRef.current.isDevToolsOpened()) {
@@ -116,7 +117,7 @@ class HelpViewModel extends WebViewModel {
                 },
             },
             {
-                label: "Set Zoom Factor",
+                label: tCurrent("Set Zoom Factor"),
                 submenu: zoomSubMenu,
             },
         ];

@@ -5,7 +5,15 @@ import { ClientService, ObjectService, WindowService, WorkspaceService } from "@
 import { waveEventSubscribeSingle } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { fireAndForget } from "@/util/util";
-import { BaseWindow, BaseWindowConstructorOptions, dialog, globalShortcut, ipcMain, screen, webContents } from "electron";
+import {
+    BaseWindow,
+    BaseWindowConstructorOptions,
+    dialog,
+    globalShortcut,
+    ipcMain,
+    screen,
+    webContents,
+} from "electron";
 import { globalEvents } from "emain/emain-events";
 import path from "path";
 import { debounce } from "throttle-debounce";
@@ -16,6 +24,8 @@ import {
     setWasActive,
     setWasInFg,
 } from "./emain-activity";
+import { tMain } from "./emain-i18n";
+import { createSecureIpcRegistrar } from "./emain-ipc-guard";
 import { log } from "./emain-log";
 import { getElectronAppBasePath, isDev, unamePlatform } from "./emain-platform";
 import { getOrCreateWebViewForTab, getWaveTabViewByWebContentsId, WaveTabView } from "./emain-tabview";
@@ -237,7 +247,7 @@ export class WaveBrowserWindow extends BaseWindow {
                 return;
             }
             this.finalizePositioning();
-        }, 1000);
+        }, 10000);
         this.on(
             // @ts-expect-error -- "resize" event with debounce handler not in Electron type definitions
             "resize",
@@ -314,10 +324,11 @@ export class WaveBrowserWindow extends BaseWindow {
                         if (isNonEmptyUnsavedWorkspace(workspace)) {
                             const choice = dialog.showMessageBoxSync(this, {
                                 type: "question",
-                                buttons: ["Cancel", "Close Window"],
-                                title: "Confirm",
-                                message:
-                                    "Window has unsaved tabs, closing window will delete existing tabs.\n\nContinue?",
+                                buttons: [tMain("Cancel"), tMain("Close Window")],
+                                title: tMain("Confirm"),
+                                message: tMain(
+                                    "Window has unsaved tabs, closing window will delete existing tabs.\n\nContinue?"
+                                ),
                             });
                             if (choice === 0) {
                                 return;
@@ -741,13 +752,19 @@ export async function createBrowserWindow(
     return bwin;
 }
 
-ipcMain.on("set-active-tab", async (event, tabId) => {
-    const ww = getWaveWindowByWebContentsId(event.sender.id);
-    console.log("set-active-tab", tabId, ww?.waveWindowId);
-    await ww?.setActiveTab(tabId, true);
-});
+const windowIpc = createSecureIpcRegistrar(ipcMain, (event) => getWaveWindowByWebContentsId(event.sender.id) != null);
 
-ipcMain.on("create-tab", async (event, _opts) => {
+windowIpc.on(
+    "set-active-tab",
+    async (event, tabId) => {
+        const ww = getWaveWindowByWebContentsId(event.sender.id);
+        console.log("set-active-tab", tabId, ww?.waveWindowId);
+        await ww?.setActiveTab(tabId, true);
+    },
+    (tabId) => typeof tabId === "string" && tabId.length > 0
+);
+
+windowIpc.on("create-tab", async (event, _opts) => {
     const senderWc = event.sender;
     const ww = getWaveWindowByWebContentsId(senderWc.id);
     if (ww != null) {
@@ -757,43 +774,60 @@ ipcMain.on("create-tab", async (event, _opts) => {
     return null;
 });
 
-ipcMain.on("set-waveai-open", (event, isOpen: boolean) => {
-    const tabView = getWaveTabViewByWebContentsId(event.sender.id);
-    if (tabView) {
-        tabView.isWaveAIOpen = isOpen;
-    }
-});
+windowIpc.on(
+    "set-waveai-open",
+    (event, isOpen: boolean) => {
+        const tabView = getWaveTabViewByWebContentsId(event.sender.id);
+        if (tabView) {
+            tabView.isWaveAIOpen = isOpen;
+        }
+    },
+    (isOpen) => typeof isOpen === "boolean"
+);
 
-ipcMain.handle("close-tab", async (event, workspaceId: string, tabId: string, confirmClose: boolean) => {
-    const ww = getWaveWindowByWorkspaceId(workspaceId);
-    if (ww == null) {
-        console.log(`close-tab: no window found for workspace ws=${workspaceId} tab=${tabId}`);
-        return false;
-    }
-    if (confirmClose) {
-        const choice = dialog.showMessageBoxSync(ww, {
-            type: "question",
-            defaultId: 1, // Enter activates "Close Tab"
-            cancelId: 0, // Esc activates "Cancel"
-            buttons: ["Cancel", "Close Tab"],
-            title: "Confirm",
-            message: "Are you sure you want to close this tab?",
-        });
-        if (choice === 0) {
+windowIpc.handle(
+    "close-tab",
+    async (event, workspaceId: string, tabId: string, confirmClose: boolean) => {
+        const ww = getWaveWindowByWebContentsId(event.sender.id);
+        if (ww == null || ww.workspaceId !== workspaceId) {
+            console.log(`close-tab: no window found for workspace ws=${workspaceId} tab=${tabId}`);
             return false;
         }
-    }
-    await ww.queueCloseTab(tabId);
-    return true;
-});
+        if (confirmClose) {
+            const choice = dialog.showMessageBoxSync(ww, {
+                type: "question",
+                defaultId: 1, // Enter activates "Close Tab"
+                cancelId: 0, // Esc activates "Cancel"
+                buttons: [tMain("Cancel"), tMain("Close Tab")],
+                title: tMain("Confirm"),
+                message: tMain("Are you sure you want to close this tab?"),
+            });
+            if (choice === 0) {
+                return false;
+            }
+        }
+        await ww.queueCloseTab(tabId);
+        return true;
+    },
+    (workspaceId, tabId, confirmClose) =>
+        typeof workspaceId === "string" &&
+        workspaceId.length > 0 &&
+        typeof tabId === "string" &&
+        tabId.length > 0 &&
+        typeof confirmClose === "boolean"
+);
 
-ipcMain.on("switch-workspace", (event, workspaceId) => {
-    fireAndForget(async () => {
-        const ww = getWaveWindowByWebContentsId(event.sender.id);
-        console.log("switch-workspace", workspaceId, ww?.waveWindowId);
-        await ww?.switchWorkspace(workspaceId);
-    });
-});
+windowIpc.on(
+    "switch-workspace",
+    (event, workspaceId) => {
+        fireAndForget(async () => {
+            const ww = getWaveWindowByWebContentsId(event.sender.id);
+            console.log("switch-workspace", workspaceId, ww?.waveWindowId);
+            await ww?.switchWorkspace(workspaceId);
+        });
+    },
+    (workspaceId) => typeof workspaceId === "string" && workspaceId.length > 0
+);
 
 export async function createWorkspace(window: WaveBrowserWindow) {
     const newWsId = await WorkspaceService.CreateWorkspace("", "", "", true);
@@ -806,7 +840,7 @@ export async function createWorkspace(window: WaveBrowserWindow) {
     }
 }
 
-ipcMain.on("create-workspace", (event) => {
+windowIpc.on("create-workspace", (event) => {
     fireAndForget(async () => {
         const ww = getWaveWindowByWebContentsId(event.sender.id);
         console.log("create-workspace", ww?.waveWindowId);
@@ -814,38 +848,42 @@ ipcMain.on("create-workspace", (event) => {
     });
 });
 
-ipcMain.on("delete-workspace", (event, workspaceId) => {
-    fireAndForget(async () => {
-        const ww = getWaveWindowByWebContentsId(event.sender.id);
-        console.log("delete-workspace", workspaceId, ww?.waveWindowId);
+windowIpc.on(
+    "delete-workspace",
+    (event, workspaceId) => {
+        fireAndForget(async () => {
+            const ww = getWaveWindowByWebContentsId(event.sender.id);
+            console.log("delete-workspace", workspaceId, ww?.waveWindowId);
 
-        const workspaceList = await WorkspaceService.ListWorkspaces();
+            const workspaceList = await WorkspaceService.ListWorkspaces();
 
-        const _workspaceHasWindow = !!workspaceList.find((wse) => wse.workspaceid === workspaceId)?.windowid;
+            const _workspaceHasWindow = !!workspaceList.find((wse) => wse.workspaceid === workspaceId)?.windowid;
 
-        const choice = dialog.showMessageBoxSync(this, {
-            type: "question",
-            buttons: ["Cancel", "Delete Workspace"],
-            title: "Confirm",
-            message: `Deleting workspace will also delete its contents.\n\nContinue?`,
-        });
-        if (choice === 0) {
-            console.log("user cancelled workspace delete", workspaceId, ww?.waveWindowId);
-            return;
-        }
-
-        const newWorkspaceId = await WorkspaceService.DeleteWorkspace(workspaceId);
-        console.log("delete-workspace done", workspaceId, ww?.waveWindowId);
-        if (ww?.workspaceId == workspaceId) {
-            if (newWorkspaceId) {
-                await ww.switchWorkspace(newWorkspaceId);
-            } else {
-                console.log("delete-workspace closing window", workspaceId, ww?.waveWindowId);
-                ww.destroy();
+            const choice = dialog.showMessageBoxSync(this, {
+                type: "question",
+                buttons: [tMain("Cancel"), tMain("Delete Workspace")],
+                title: tMain("Confirm"),
+                message: tMain("Deleting workspace will also delete its contents.\n\nContinue?"),
+            });
+            if (choice === 0) {
+                console.log("user cancelled workspace delete", workspaceId, ww?.waveWindowId);
+                return;
             }
-        }
-    });
-});
+
+            const newWorkspaceId = await WorkspaceService.DeleteWorkspace(workspaceId);
+            console.log("delete-workspace done", workspaceId, ww?.waveWindowId);
+            if (ww?.workspaceId == workspaceId) {
+                if (newWorkspaceId) {
+                    await ww.switchWorkspace(newWorkspaceId);
+                } else {
+                    console.log("delete-workspace closing window", workspaceId, ww?.waveWindowId);
+                    ww.destroy();
+                }
+            }
+        });
+    },
+    (workspaceId) => typeof workspaceId === "string" && workspaceId.length > 0
+);
 
 export async function createNewWaveWindow() {
     log("createNewWaveWindow");

@@ -1,19 +1,19 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { AIPanel } from "@/app/aipanel/aipanel";
+import { LazyAIPanel as AIPanel } from "@/app/aipanel/aipanel-loader";
 import { ErrorBoundary } from "@/app/element/errorboundary";
+import { lazyWithRetry, scheduleIdlePreload } from "@/app/element/lazy-module";
 import { CenteredDiv } from "@/app/element/quickelems";
 import { ModalsRenderer } from "@/app/modals/modalsrenderer";
 import { TabBar } from "@/app/tab/tabbar";
 import { TabContent } from "@/app/tab/tabcontent";
 import { VTabBar } from "@/app/tab/vtabbar";
-import { Widgets } from "@/app/workspace/widgets";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { atoms, getApi, getSettingsKeyAtom } from "@/store/global";
 import { isMacOS } from "@/util/platformutil";
 import { useAtomValue } from "jotai";
-import { memo, useEffect, useRef } from "react";
+import { memo, Suspense, useEffect, useRef, useState } from "react";
 import {
     ImperativePanelGroupHandle,
     ImperativePanelHandle,
@@ -21,6 +21,11 @@ import {
     PanelGroup,
     PanelResizeHandle,
 } from "react-resizable-panels";
+
+const Widgets = lazyWithRetry(
+    () => import("@/app/workspace/widgets").then((module) => ({ default: module.Widgets })),
+    "Widgets"
+);
 
 const MacOSTabBarSpacer = memo(() => {
     return (
@@ -46,6 +51,7 @@ const WorkspaceElem = memo(() => {
     const tabBarPosition = useAtomValue(getSettingsKeyAtom("app:tabbar")) ?? "top";
     const showLeftTabBar = tabBarPosition === "left";
     const aiPanelVisible = useAtomValue(workspaceLayoutModel.panelVisibleAtom);
+    const [aiPanelEverOpened, setAIPanelEverOpened] = useState(aiPanelVisible);
     const widgetsSidebarVisible = useAtomValue(workspaceLayoutModel.widgetsSidebarVisibleAtom);
     const windowWidth = window.innerWidth;
     const leftGroupInitialPct = workspaceLayoutModel.getLeftGroupInitialPercentage(windowWidth, showLeftTabBar);
@@ -86,6 +92,17 @@ const WorkspaceElem = memo(() => {
         const isVisible = workspaceLayoutModel.getAIPanelVisible();
         getApi().setWaveAIOpen(isVisible);
     }, []);
+
+    useEffect(() => {
+        if (aiPanelVisible) return;
+        return scheduleIdlePreload(AIPanel, 5000);
+    }, []);
+
+    useEffect(() => {
+        if (aiPanelVisible) {
+            setAIPanelEverOpened(true);
+        }
+    }, [aiPanelVisible]);
 
     useEffect(() => {
         window.addEventListener("resize", workspaceLayoutModel.handleWindowResize);
@@ -147,7 +164,11 @@ const WorkspaceElem = memo(() => {
                                         ref={aiPanelWrapperRef}
                                         className={`w-full h-full pr-0.5 ${aiPanelVisible ? "" : "opacity-0"}`}
                                     >
-                                        {tabId !== "" && <AIPanel roundTopLeft={showLeftTabBar} />}
+                                        {tabId !== "" && aiPanelEverOpened && (
+                                            <Suspense fallback={null}>
+                                                <AIPanel roundTopLeft={showLeftTabBar} />
+                                            </Suspense>
+                                        )}
                                     </div>
                                 </Panel>
                             </PanelGroup>
@@ -159,7 +180,11 @@ const WorkspaceElem = memo(() => {
                             ) : (
                                 <div className="flex flex-row h-full">
                                     <TabContent key={tabId} tabId={tabId} noTopPadding={showLeftTabBar && isMacOS()} />
-                                    {widgetsSidebarVisible && <Widgets />}
+                                    {widgetsSidebarVisible && (
+                                        <Suspense fallback={null}>
+                                            <Widgets />
+                                        </Suspense>
+                                    )}
                                 </div>
                             )}
                         </Panel>

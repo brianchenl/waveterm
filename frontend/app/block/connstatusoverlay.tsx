@@ -4,6 +4,7 @@
 import { Button } from "@/app/element/button";
 import { CopyButton } from "@/app/element/copybutton";
 import { useDimensionsWithCallbackRef } from "@/app/hook/useDimensions";
+import { useTranslation } from "@/app/i18n/use-i18n";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { useWaveEnv } from "@/app/waveenv/waveenv";
 import { NodeModel } from "@/layout/index";
@@ -53,6 +54,7 @@ const StalledOverlay = React.memo(
         connStatus: ConnStatus;
         overlayRefCallback: (el: HTMLDivElement | null) => void;
     }) => {
+        const { t } = useTranslation();
         const [elapsedTime, setElapsedTime] = React.useState<string>("");
 
         const waveEnv = useWaveEnv<BlockEnv>();
@@ -87,19 +89,19 @@ const StalledOverlay = React.memo(
                 <div className="flex items-center gap-3 w-full pt-2.5 pb-2.5 pr-2 pl-3">
                     <i
                         className="fa-solid fa-triangle-exclamation text-warning text-base shrink-0"
-                        title="Connection Stalled"
+                        title={t("Connection Stalled")}
                     ></i>
                     <div className="text-[11px] font-semibold leading-4 tracking-[0.11px] text-white min-w-0 flex-1 break-words @max-xxs:hidden">
-                        Connection to "{connName}" is stalled
-                        {elapsedTime && ` (no activity for ${elapsedTime})`}
+                        {t('Connection to "{{name}}" is stalled', { name: connName })}
+                        {elapsedTime && ` (${t("no activity for {{elapsed}}", { elapsed: elapsedTime })})`}
                     </div>
                     <div className="flex-1 hidden @max-xxs:block"></div>
                     <Button
                         className="outlined grey text-[11px] py-[3px] px-[7px] @max-w350:text-[12px] @max-w350:py-[5px] @max-w350:px-[6px]"
                         onClick={handleDisconnect}
-                        title="Disconnect"
+                        title={t("Disconnect")}
                     >
-                        <span className="@max-w350:hidden!">Disconnect</span>
+                        <span className="@max-w350:hidden!">{t("Disconnect")}</span>
                         <i className="fa-solid fa-link-slash hidden! @max-w350:inline!"></i>
                     </Button>
                 </div>
@@ -119,6 +121,7 @@ export const ConnStatusOverlay = React.memo(
         viewModel: ViewModel;
         changeConnModalAtom: jotai.PrimitiveAtom<boolean>;
     }) => {
+        const { t } = useTranslation();
         const waveEnv = useWaveEnv<BlockEnv>();
         const connName = jotai.useAtomValue(waveEnv.getBlockMetaKeyAtom(nodeModel.blockId, "connection"));
         const [connModalOpen] = jotai.useAtom(changeConnModalAtom);
@@ -127,8 +130,7 @@ export const ConnStatusOverlay = React.memo(
         const [overlayRefCallback, _, domRect] = useDimensionsWithCallbackRef(30);
         const width = domRect?.width;
         const [showError, setShowError] = React.useState(false);
-        const wshConfigEnabled =
-            jotai.useAtomValue(waveEnv.getConnConfigKeyAtom(connName, "conn:wshenabled")) ?? true;
+        const wshConfigEnabled = jotai.useAtomValue(waveEnv.getConnConfigKeyAtom(connName, "conn:wshenabled")) ?? true;
         const [showWshError, setShowWshError] = React.useState(false);
 
         React.useEffect(() => {
@@ -171,10 +173,10 @@ export const ConnStatusOverlay = React.memo(
             }
         }, [connName, waveEnv]);
 
-        let statusText = `Disconnected from "${connName}"`;
+        let statusText = t('Disconnected from "{{name}}"', { name: connName });
         let showReconnect = true;
         if (connStatus.status == "connecting") {
-            statusText = `Connecting to "${connName}"...`;
+            statusText = t('Connecting to "{{name}}"...', { name: connName });
             showReconnect = false;
         }
         if (connStatus.status == "connected") {
@@ -186,7 +188,7 @@ export const ConnStatusOverlay = React.memo(
             reconDisplay = <i className="fa-sharp fa-solid fa-rotate-right"></i>;
             reconClassName = clsx(reconClassName, "text-[12px] py-[5px] px-[6px]");
         } else {
-            reconDisplay = "Reconnect";
+            reconDisplay = t("Reconnect");
             reconClassName = clsx(reconClassName, "text-[11px] py-[3px] px-[7px]");
         }
         const showIcon = connStatus.status != "connecting";
@@ -205,15 +207,15 @@ export const ConnStatusOverlay = React.memo(
             async (e: React.MouseEvent) => {
                 const errTexts = [];
                 if (showError) {
-                    errTexts.push(`error: ${connStatus.error}`);
+                    errTexts.push(`${t("Error")}: ${connStatus.error}`);
                 }
                 if (showWshError) {
-                    errTexts.push(`unable to use wsh: ${connStatus.wsherror}`);
+                    errTexts.push(`${t("Unable to use wsh")}: ${connStatus.wsherror}`);
                 }
                 const textToCopy = errTexts.join("\n");
                 await navigator.clipboard.writeText(textToCopy);
             },
-            [showError, showWshError, connStatus.error, connStatus.wsherror]
+            [showError, showWshError, connStatus.error, connStatus.wsherror, t]
         );
 
         const showStalled = connStatus.status == "connected" && connStatus.connhealthstatus == "stalled";
@@ -239,14 +241,22 @@ export const ConnStatusOverlay = React.memo(
                                     className="connstatus-error"
                                     options={{ scrollbars: { autoHide: "leave" } }}
                                 >
-                                    <CopyButton className="copy-button" onClick={handleCopy} title="Copy" />
-                                    {showError ? <div>error: {connStatus.error}</div> : null}
-                                    {showWshError ? <div>unable to use wsh: {connStatus.wsherror}</div> : null}
+                                    <CopyButton className="copy-button" onClick={handleCopy} title={t("Copy")} />
+                                    {showError ? (
+                                        <div>
+                                            {t("Error")}: {connStatus.error}
+                                        </div>
+                                    ) : null}
+                                    {showWshError ? (
+                                        <div>
+                                            {t("Unable to use wsh")}: {connStatus.wsherror}
+                                        </div>
+                                    ) : null}
                                 </OverlayScrollbarsComponent>
                             )}
                             {showWshError && (
                                 <Button className={reconClassName} onClick={handleDisableWsh}>
-                                    always disable wsh
+                                    {t("Always disable wsh")}
                                 </Button>
                             )}
                         </div>

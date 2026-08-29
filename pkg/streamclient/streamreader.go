@@ -14,6 +14,12 @@ type AckSender interface {
 	SendAck(ackPk wshrpc.CommandStreamAckData)
 }
 
+const (
+	MaxStreamReadWindowBytes = 16 * 1024 * 1024
+	MaxStreamPacketBytes     = 1024 * 1024
+	MaxOutOfOrderPackets     = 128
+)
+
 type Reader struct {
 	lock         sync.Mutex
 	cond         *sync.Cond
@@ -27,6 +33,7 @@ type Reader struct {
 	closed       bool
 	lastRwndSent int64
 	oooPackets   []wshrpc.CommandStreamData // out-of-order packets awaiting delivery
+	oooBytes     int64
 }
 
 func NewReader(id string, readWindow int64, ackSender AckSender) *Reader {
@@ -34,6 +41,12 @@ func NewReader(id string, readWindow int64, ackSender AckSender) *Reader {
 }
 
 func NewReaderWithSeq(id string, readWindow int64, startSeq int64, ackSender AckSender) *Reader {
+	if readWindow < 1 {
+		readWindow = 1
+	}
+	if readWindow > MaxStreamReadWindowBytes {
+		readWindow = MaxStreamReadWindowBytes
+	}
 	r := &Reader{
 		id:           id,
 		readWindow:   readWindow,
@@ -64,29 +77,70 @@ func (r *Reader) RecvData(dataPk wshrpc.CommandStreamData) {
 		r.sendAckLocked(true, false, "")
 		return
 	}
-
 	if dataPk.Seq < r.nextSeq {
 		return
 	}
-	if dataPk.Seq > r.nextSeq {
-		r.addOOOPacketLocked(dataPk)
+
+	if dataPk.Data64 != "" && base64.StdEncoding.DecodedLen(len(dataPk.Data64)) > MaxStreamPacketBytes {
+		r.failProtocolLocked("stream packet exceeds maximum size")
+		return
+	}
+	data, err := decodeStreamData(dataPk)
+	if err != nil {
+		r.failProtocolLocked("invalid base64 stream payload")
+		return
+	}
+	if len(data) > MaxStreamPacketBytes {
+		r.failProtocolLocked("stream packet exceeds maximum size")
+		return
+	}
+	if dataPk.Seq-r.nextSeq > r.readWindow {
+		r.failProtocolLocked("stream packet sequence exceeds receive window")
 		return
 	}
 
-	r.recvDataOrderedLocked(dataPk)
+	if dataPk.Seq > r.nextSeq {
+		for _, pkt := range r.oooPackets {
+			if pkt.Seq == dataPk.Seq {
+				return
+			}
+		}
+		if int64(len(r.buffer))+r.oooBytes+int64(len(data)) > r.readWindow {
+			r.failProtocolLocked("stream data exceeds receive window")
+			return
+		}
+		r.addOOOPacketLocked(dataPk, int64(len(data)))
+		return
+	}
+	if int64(len(r.buffer))+r.oooBytes+int64(len(data)) > r.readWindow {
+		r.failProtocolLocked("stream data exceeds receive window")
+		return
+	}
+
+	r.recvDataOrderedLocked(dataPk, data)
 	r.processOOOPacketsLocked()
 	r.cond.Broadcast()
 	r.sendAckLocked(r.eof, false, "")
 }
 
-func (r *Reader) recvDataOrderedLocked(dataPk wshrpc.CommandStreamData) {
-	if dataPk.Data64 != "" {
-		data, err := base64.StdEncoding.DecodeString(dataPk.Data64)
-		if err != nil {
-			r.err = err
-			r.sendAckLocked(false, true, "base64 decode error")
-			return
-		}
+func decodeStreamData(dataPk wshrpc.CommandStreamData) ([]byte, error) {
+	if dataPk.Data64 == "" {
+		return nil, nil
+	}
+	return base64.StdEncoding.DecodeString(dataPk.Data64)
+}
+
+func (r *Reader) failProtocolLocked(message string) {
+	r.err = fmt.Errorf("stream protocol error: %s", message)
+	r.buffer = nil
+	r.oooPackets = nil
+	r.oooBytes = 0
+	r.cond.Broadcast()
+	r.sendAckLocked(false, true, message)
+}
+
+func (r *Reader) recvDataOrderedLocked(dataPk wshrpc.CommandStreamData, data []byte) {
+	if len(data) != 0 {
 		r.buffer = append(r.buffer, data...)
 		r.nextSeq += int64(len(data))
 	}
@@ -96,14 +150,13 @@ func (r *Reader) recvDataOrderedLocked(dataPk wshrpc.CommandStreamData) {
 	}
 }
 
-func (r *Reader) addOOOPacketLocked(dataPk wshrpc.CommandStreamData) {
-	for _, pkt := range r.oooPackets {
-		if pkt.Seq == dataPk.Seq {
-			// this handles duplicates
-			return
-		}
+func (r *Reader) addOOOPacketLocked(dataPk wshrpc.CommandStreamData, dataLen int64) {
+	if len(r.oooPackets) >= MaxOutOfOrderPackets {
+		r.failProtocolLocked("too many out-of-order stream packets")
+		return
 	}
 	r.oooPackets = append(r.oooPackets, dataPk)
+	r.oooBytes += dataLen
 }
 
 func (r *Reader) processOOOPacketsLocked() {
@@ -118,12 +171,19 @@ func (r *Reader) processOOOPacketsLocked() {
 		if r.eof || r.err != nil {
 			// we're done, so we can clear any pending ooo packets
 			r.oooPackets = nil
+			r.oooBytes = 0
 			return
 		}
 		if pkt.Seq != r.nextSeq {
 			break
 		}
-		r.recvDataOrderedLocked(pkt)
+		data, err := decodeStreamData(pkt)
+		if err != nil {
+			r.failProtocolLocked("invalid buffered base64 stream payload")
+			return
+		}
+		r.recvDataOrderedLocked(pkt, data)
+		r.oooBytes -= int64(len(data))
 		consumed++
 	}
 	r.oooPackets = r.oooPackets[consumed:]

@@ -111,6 +111,8 @@ type WshRpcInterface interface {
 	DismissWshFailCommand(ctx context.Context, connName string) error
 	ConnUpdateWshCommand(ctx context.Context, remoteInfo RemoteInfo) (bool, error)
 	FindGitBashCommand(ctx context.Context, rescan bool) (string, error)
+	WindowsDiagnosticsCommand(ctx context.Context, data CommandWindowsDiagnosticsData) (*CommandWindowsDiagnosticsRtnData, error)
+	AIProviderTestCommand(ctx context.Context, data CommandAIProviderTestData) (*CommandAIProviderTestRtnData, error)
 	ConnServerInitCommand(ctx context.Context, data CommandConnServerInitData) error
 	NotifySystemResumeCommand(ctx context.Context) error
 
@@ -235,6 +237,11 @@ type RpcContext struct {
 	IsRouter  bool   `json:"isrouter,omitempty"`  // if this is for a sub-router
 }
 
+const (
+	RpcCapabilitySecretRead  = "secret:read"
+	RpcCapabilitySecretWrite = "secret:write"
+)
+
 func (rc RpcContext) GenerateRouteId() string {
 	if rc.RouteId != "" {
 		return rc.RouteId
@@ -341,7 +348,6 @@ type CommandEventReadHistoryData struct {
 	MaxItems int    `json:"maxitems"`
 }
 
-
 type CpuDataRequest struct {
 	Id    string `json:"id"`
 	Count int    `json:"count"`
@@ -370,6 +376,57 @@ type ConnRequest struct {
 	Host       string               `json:"host"`
 	Keywords   wconfig.ConnKeywords `json:"keywords,omitempty"`
 	LogBlockId string               `json:"logblockid,omitempty"`
+}
+
+type CommandWindowsDiagnosticsData struct {
+	SSHHost string `json:"sshhost,omitempty"`
+}
+
+type WindowsShellInfo struct {
+	Id          string `json:"id"`
+	Name        string `json:"name"`
+	Path        string `json:"path,omitempty"`
+	Available   bool   `json:"available"`
+	Recommended bool   `json:"recommended,omitempty"`
+}
+
+type SSHHostDiagnostics struct {
+	Alias         string   `json:"alias"`
+	HostName      string   `json:"hostname,omitempty"`
+	User          string   `json:"user,omitempty"`
+	Port          string   `json:"port,omitempty"`
+	IdentityFiles []string `json:"identityfiles,omitempty"`
+	ProxyJump     []string `json:"proxyjump,omitempty"`
+}
+
+type CommandWindowsDiagnosticsRtnData struct {
+	Platform              string              `json:"platform"`
+	SSHConfigPath         string              `json:"sshconfigpath"`
+	SSHConfigExists       bool                `json:"sshconfigexists"`
+	SSHConfigReadable     bool                `json:"sshconfigreadable"`
+	SSHConfigError        string              `json:"sshconfigerror,omitempty"`
+	SSHConfigHasMatch     bool                `json:"sshconfighasmatch,omitempty"`
+	SSHHosts              []string            `json:"sshhosts,omitempty"`
+	SelectedSSHHost       *SSHHostDiagnostics `json:"selectedsshhost,omitempty"`
+	SSHAgentPath          string              `json:"sshagentpath"`
+	SSHAgentAvailable     bool                `json:"sshagentavailable"`
+	SSHAgentKeyCount      int                 `json:"sshagentkeycount"`
+	SSHAgentError         string              `json:"sshagenterror,omitempty"`
+	Shells                []WindowsShellInfo  `json:"shells"`
+	CurrentLocalShellPath string              `json:"currentlocalshellpath,omitempty"`
+}
+
+type CommandAIProviderTestData struct {
+	Provider string `json:"provider"`
+	APIToken string `json:"apitoken,omitempty"`
+	ProxyURL string `json:"proxyurl,omitempty"`
+}
+
+type CommandAIProviderTestRtnData struct {
+	Success   bool     `json:"success"`
+	Models    []string `json:"models,omitempty"`
+	LatencyMs int64    `json:"latencyms"`
+	Error     string   `json:"error,omitempty"`
 }
 
 type RemoteInfo struct {

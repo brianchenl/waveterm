@@ -1,6 +1,7 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { useTranslation } from "@/app/i18n/use-i18n";
 import { cn, makeIconClass } from "@/util/util";
 import { memo, useState } from "react";
 import { WaveAIModel } from "./waveai-model";
@@ -10,6 +11,7 @@ interface AIFeedbackButtonsProps {
 }
 
 export const AIFeedbackButtons = memo(({ messageText }: AIFeedbackButtonsProps) => {
+    const { t } = useTranslation();
     const [thumbsUpClicked, setThumbsUpClicked] = useState(false);
     const [thumbsDownClicked, setThumbsDownClicked] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -46,11 +48,9 @@ export const AIFeedbackButtons = memo(({ messageText }: AIFeedbackButtonsProps) 
                 onClick={handleThumbsUp}
                 className={cn(
                     "p-1.5 rounded cursor-pointer transition-colors",
-                    thumbsUpClicked
-                        ? "text-accent"
-                        : "text-secondary hover:bg-zinc-700 hover:text-primary"
+                    thumbsUpClicked ? "text-accent" : "text-secondary hover:bg-zinc-700 hover:text-primary"
                 )}
-                title="Good Response"
+                title={t("Good Response")}
             >
                 <i className={makeIconClass(thumbsUpClicked ? "solid@thumbs-up" : "regular@thumbs-up", false)} />
             </button>
@@ -58,11 +58,9 @@ export const AIFeedbackButtons = memo(({ messageText }: AIFeedbackButtonsProps) 
                 onClick={handleThumbsDown}
                 className={cn(
                     "p-1.5 rounded cursor-pointer transition-colors",
-                    thumbsDownClicked
-                        ? "text-accent"
-                        : "text-secondary hover:bg-zinc-700 hover:text-primary"
+                    thumbsDownClicked ? "text-accent" : "text-secondary hover:bg-zinc-700 hover:text-primary"
                 )}
-                title="Bad Response"
+                title={t("Bad Response")}
             >
                 <i className={makeIconClass(thumbsDownClicked ? "solid@thumbs-down" : "regular@thumbs-down", false)} />
             </button>
@@ -71,11 +69,9 @@ export const AIFeedbackButtons = memo(({ messageText }: AIFeedbackButtonsProps) 
                     onClick={handleCopy}
                     className={cn(
                         "p-1.5 rounded cursor-pointer transition-colors",
-                        copied
-                            ? "text-success"
-                            : "text-secondary hover:bg-zinc-700 hover:text-primary"
+                        copied ? "text-success" : "text-secondary hover:bg-zinc-700 hover:text-primary"
                     )}
-                    title="Copy Message"
+                    title={t("Copy Message")}
                 >
                     <i className={makeIconClass(copied ? "solid@check" : "regular@copy", false)} />
                 </button>

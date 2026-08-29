@@ -3,6 +3,7 @@
 
 import Logo from "@/app/asset/logo.svg";
 import { ErrorBoundary } from "@/app/element/errorboundary";
+import { lazyWithRetry, type PreloadableComponent } from "@/app/element/lazy-module";
 import { getAtoms, initGlobalAtoms } from "@/app/store/global-atoms";
 import { GlobalModel } from "@/app/store/global-model";
 import { globalStore } from "@/app/store/jotaiStore";
@@ -10,7 +11,7 @@ import { getTabModelByTabId, TabModelContext } from "@/app/store/tab-model";
 import { WaveEnvContext } from "@/app/waveenv/waveenv";
 import { loadFonts } from "@/util/fontutil";
 import { Provider } from "jotai";
-import React, { lazy, Suspense, useRef } from "react";
+import React, { Suspense, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { makeMockWaveEnv, PreviewClientId, PreviewTabId, PreviewWindowId } from "./mock/mockwaveenv";
 import { installPreviewElectronApi } from "./mock/preview-electron-api";
@@ -38,11 +39,15 @@ function pathToKey(path: string): string {
 
 // Build a map of key → lazy React component.
 // Each preview file is expected to have a default export that is the preview component.
-const previews: Record<string, React.LazyExoticComponent<React.ComponentType>> = Object.fromEntries(
+const previews: Record<string, PreloadableComponent<Record<string, never>>> = Object.fromEntries(
     Object.entries(previewModules).map(([path, loader]) => [
         pathToKey(path),
-        lazy(() =>
-            loader().then((mod) => ({ default: (mod.default ?? Object.values(mod)[0]) as React.ComponentType }))
+        lazyWithRetry(
+            () =>
+                loader().then((mod) => ({
+                    default: (mod.default ?? Object.values(mod)[0]) as React.ComponentType<Record<string, never>>,
+                })),
+            `preview ${pathToKey(path)}`
         ),
     ])
 );

@@ -24,6 +24,7 @@ interface TooltipProps {
     divClassName?: string;
     divStyle?: React.CSSProperties;
     divOnClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
+    divOnPointerEnter?: (e: React.PointerEvent<HTMLDivElement>) => void;
     divRef?: React.RefObject<HTMLDivElement>;
     hideOnClick?: boolean;
 }
@@ -37,6 +38,7 @@ function TooltipInner({
     divClassName,
     divStyle,
     divOnClick,
+    divOnPointerEnter,
     divRef,
     hideOnClick = false,
 }: Omit<TooltipProps, "disable">) {
@@ -129,11 +131,15 @@ function TooltipInner({
         [hideOnClick, divOnClick]
     );
 
-    const handlePointerEnter = useCallback(() => {
-        if (hideOnClick && clickDisabled) {
-            setClickDisabled(false);
-        }
-    }, [hideOnClick, clickDisabled]);
+    const handlePointerEnter = useCallback(
+        (event: React.PointerEvent<HTMLDivElement>) => {
+            if (hideOnClick && clickDisabled) {
+                setClickDisabled(false);
+            }
+            divOnPointerEnter?.(event);
+        },
+        [hideOnClick, clickDisabled, divOnPointerEnter]
+    );
 
     return (
         <>

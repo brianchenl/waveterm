@@ -25,6 +25,7 @@ import {
     WaveAppResourcesPathVarName,
 } from "./emain-util";
 import { updater } from "./updater";
+import { parseWaveSrvStartLine } from "./emain-wavesrv-start";
 
 let isWaveSrvDead = false;
 let waveSrvProc: child_process.ChildProcessWithoutNullStreams | null = null;
@@ -107,19 +108,17 @@ export function runWaveSrv(handleWSEvent: (evtMsg: WSEventType) => void): Promis
     });
     rlStderr.on("line", (line) => {
         if (line.includes("WAVESRV-ESTART")) {
-            const startParams = /ws:([a-z0-9.:]+) web:([a-z0-9.:]+) version:([a-z0-9.-]+) buildtime:(\d+)/gm.exec(
-                line
-            );
+            const startParams = parseWaveSrvStartLine(line);
             if (startParams == null) {
                 console.log("error parsing WAVESRV-ESTART line", line);
                 setUserConfirmedQuit(true);
                 electron.app.quit();
                 return;
             }
-            process.env[WSServerEndpointVarName] = startParams[1];
-            process.env[WebServerEndpointVarName] = startParams[2];
-            WaveVersion = startParams[3];
-            WaveBuildTime = parseInt(startParams[4]);
+            process.env[WSServerEndpointVarName] = startParams.wsEndpoint;
+            process.env[WebServerEndpointVarName] = startParams.webEndpoint;
+            WaveVersion = startParams.version;
+            WaveBuildTime = startParams.buildTime;
             waveSrvReadyResolve(true);
             return;
         }

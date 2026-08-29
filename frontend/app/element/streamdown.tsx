@@ -3,14 +3,28 @@
 
 import { CopyButton } from "@/app/element/copybutton";
 import { IconButton } from "@/app/element/iconbutton";
+import { lazyWithRetry } from "@/app/element/lazy-module";
+import { useTranslation } from "@/app/i18n/use-i18n";
 import { cn, useAtomValueSafe } from "@/util/util";
 import type { Atom } from "jotai";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { bundledLanguages, codeToHtml } from "shiki/bundle/web";
-import { Streamdown } from "streamdown";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { throttle } from "throttle-debounce";
 
 const ShikiTheme = "github-dark-high-contrast";
+const MaxHighlightedCodeLength = 200 * 1024;
+const HighlightThrottleMs = 750;
+
+const Streamdown = lazyWithRetry(
+    () => import("streamdown").then((module) => ({ default: module.Streamdown })),
+    "AI response renderer"
+);
+
+let shikiModulePromise: Promise<typeof import("shiki/bundle/web")> | null = null;
+
+function loadShiki() {
+    shikiModulePromise ??= import("shiki/bundle/web");
+    return shikiModulePromise;
+}
 
 function extractText(node: React.ReactNode): string {
     if (node == null || typeof node === "boolean") return "";
@@ -42,7 +56,11 @@ function CodeHighlight({ className = "", lang, text }: { className?: string; lan
     const highlightCode = useCallback(
         async (textToHighlight: string, language: string, disposedRef: { current: boolean }, seq: number) => {
             try {
-                const full = await codeToHtml(textToHighlight, { lang: language, theme: ShikiTheme });
+                const shiki = await loadShiki();
+                if (!(language in shiki.bundledLanguages)) {
+                    throw new Error(`unsupported language: ${language}`);
+                }
+                const full = await shiki.codeToHtml(textToHighlight, { lang: language, theme: ShikiTheme });
                 const start = full.indexOf("<code");
                 const open = full.indexOf(">", start);
                 const end = full.lastIndexOf("</code>");
@@ -61,13 +79,27 @@ function CodeHighlight({ className = "", lang, text }: { className?: string; lan
         []
     );
 
-    const throttledHighlight = useMemo(() => throttle(300, highlightCode, { noLeading: false }), [highlightCode]);
+    const throttledHighlight = useMemo(
+        () => throttle(HighlightThrottleMs, highlightCode, { noLeading: false }),
+        [highlightCode]
+    );
+
+    useEffect(() => () => throttledHighlight.cancel(), [throttledHighlight]);
 
     useEffect(() => {
         const disposedRef = { current: false };
 
         if (!text) {
+            seqRef.current++;
             setHtml("");
+            setHasError(false);
+            return;
+        }
+
+        if (text.length > MaxHighlightedCodeLength) {
+            seqRef.current++;
+            setHtml("");
+            setHasError(true);
             return;
         }
 
@@ -111,7 +143,7 @@ export function Code({ className = "", children }: { className?: string; childre
     const lang = m?.[1] || "text";
     const text = extractText(children);
 
-    if (isCodeBlock && lang in bundledLanguages) {
+    if (isCodeBlock) {
         return <CodeHighlight className={className} lang={lang} text={text} />;
     }
 
@@ -125,6 +157,7 @@ type CodeBlockProps = {
 };
 
 const CodeBlock = ({ children, onClickExecute, codeBlockMaxWidthAtom }: CodeBlockProps) => {
+    const { t } = useTranslation();
     const codeBlockMaxWidth = useAtomValueSafe(codeBlockMaxWidthAtom);
     const getLanguage = (children: any): string => {
         if (children?.props?.className) {
@@ -161,7 +194,7 @@ const CodeBlock = ({ children, onClickExecute, codeBlockMaxWidthAtom }: CodeBloc
             <div className="flex items-center justify-between pl-3 pr-2 pt-2 pb-1.5">
                 <span className="text-[11px] text-white/50">{language}</span>
                 <div className="flex items-center gap-2">
-                    <CopyButton onClick={handleCopy} title="Copy" />
+                    <CopyButton onClick={handleCopy} title={t("Copy")} />
                     {onClickExecute && (
                         <IconButton
                             decl={{
@@ -302,27 +335,29 @@ export const WaveStreamdown = ({
     );
 
     return (
-        <Streamdown
-            parseIncompleteMarkdown={parseIncompleteMarkdown}
-            className={cn(
-                "wave-streamdown text-secondary [&>*:first-child]:mt-0 [&>*:first-child>*:first-child]:mt-0 space-y-2",
-                className
-            )}
-            shikiTheme={[ShikiTheme, ShikiTheme]}
-            controls={{
-                code: false,
-                table: false,
-                mermaid: true,
-            }}
-            mermaid={{
-                config: {
-                    theme: "dark",
-                    darkMode: true,
-                },
-            }}
-            components={components}
-        >
-            {text}
-        </Streamdown>
+        <Suspense fallback={<div className={cn("whitespace-pre-wrap text-secondary", className)}>{text}</div>}>
+            <Streamdown
+                parseIncompleteMarkdown={parseIncompleteMarkdown}
+                className={cn(
+                    "wave-streamdown text-secondary [&>*:first-child]:mt-0 [&>*:first-child>*:first-child]:mt-0 space-y-2",
+                    className
+                )}
+                shikiTheme={[ShikiTheme, ShikiTheme]}
+                controls={{
+                    code: false,
+                    table: false,
+                    mermaid: true,
+                }}
+                mermaid={{
+                    config: {
+                        theme: "dark",
+                        darkMode: true,
+                    },
+                }}
+                components={components}
+            >
+                {text}
+            </Streamdown>
+        </Suspense>
     );
 };

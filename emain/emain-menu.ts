@@ -1,12 +1,15 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { resolveLocale, translate } from "@/app/i18n/i18n";
 import { waveEventSubscribeSingle } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
 import * as electron from "electron";
 import { fireAndForget } from "../frontend/util/util";
 import { focusedBuilderWindow, getBuilderWindowById } from "./emain-builder";
+import { setMainProcessLanguage, tMain } from "./emain-i18n";
 import { openBuilderWindow } from "./emain-ipc";
+import { createSecureIpcRegistrar } from "./emain-ipc-guard";
 import { isDev, unamePlatform } from "./emain-platform";
 import { clearTabCache } from "./emain-tabview";
 import { decreaseZoomLevel, increaseZoomLevel, resetZoomLevel } from "./emain-util";
@@ -27,6 +30,8 @@ type AppMenuCallbacks = {
     relaunchBrowserWindows: () => Promise<void>;
 };
 
+type MenuTranslator = (message: string) => string;
+
 function getWindowWebContents(window: electron.BaseWindow): electron.WebContents {
     if (window == null) {
         return null;
@@ -45,11 +50,14 @@ function getWindowWebContents(window: electron.BaseWindow): electron.WebContents
     return null;
 }
 
-async function getWorkspaceMenu(ww?: WaveBrowserWindow): Promise<Electron.MenuItemConstructorOptions[]> {
+async function getWorkspaceMenu(
+    t: MenuTranslator,
+    ww?: WaveBrowserWindow
+): Promise<Electron.MenuItemConstructorOptions[]> {
     const workspaceList = await RpcApi.WorkspaceListCommand(ElectronWshClient);
     const workspaceMenu: Electron.MenuItemConstructorOptions[] = [
         {
-            label: "Create Workspace",
+            label: t("Create Workspace"),
             click: (_, window) => fireAndForget(() => createWorkspace((window as WaveBrowserWindow) ?? ww)),
         },
     ];
@@ -75,7 +83,7 @@ async function getWorkspaceMenu(ww?: WaveBrowserWindow): Promise<Electron.MenuIt
     return workspaceMenu;
 }
 
-function makeEditMenu(fullConfig?: FullConfigType): Electron.MenuItemConstructorOptions[] {
+function makeEditMenu(fullConfig: FullConfigType, t: MenuTranslator): Electron.MenuItemConstructorOptions[] {
     let pasteAccelerator: string;
     if (unamePlatform === "darwin") {
         pasteAccelerator = "Command+V";
@@ -92,34 +100,42 @@ function makeEditMenu(fullConfig?: FullConfigType): Electron.MenuItemConstructor
     return [
         {
             role: "undo",
+            label: t("Undo"),
             accelerator: unamePlatform === "darwin" ? "Command+Z" : "",
         },
         {
             role: "redo",
+            label: t("Redo"),
             accelerator: unamePlatform === "darwin" ? "Command+Shift+Z" : "",
         },
         { type: "separator" },
         {
             role: "cut",
+            label: t("Cut"),
             accelerator: unamePlatform === "darwin" ? "Command+X" : "",
         },
         {
             role: "copy",
+            label: t("Copy"),
             accelerator: unamePlatform === "darwin" ? "Command+C" : "",
         },
         {
             role: "paste",
+            label: t("Paste"),
             accelerator: pasteAccelerator,
         },
         {
             role: "pasteAndMatchStyle",
+            label: t("Paste and Match Style"),
             accelerator: unamePlatform === "darwin" ? "Command+Shift+V" : "",
         },
         {
             role: "delete",
+            label: t("Delete"),
         },
         {
             role: "selectAll",
+            label: t("Select All"),
             accelerator: unamePlatform === "darwin" ? "Command+A" : "",
         },
     ];
@@ -128,16 +144,18 @@ function makeEditMenu(fullConfig?: FullConfigType): Electron.MenuItemConstructor
 function makeFileMenu(
     numWaveWindows: number,
     callbacks: AppMenuCallbacks,
-    fullConfig: FullConfigType
+    fullConfig: FullConfigType,
+    t: MenuTranslator
 ): Electron.MenuItemConstructorOptions[] {
     const fileMenu: Electron.MenuItemConstructorOptions[] = [
         {
-            label: "New Window",
+            label: t("New Window"),
             accelerator: "CommandOrControl+Shift+N",
             click: () => fireAndForget(callbacks.createNewWaveWindow),
         },
         {
             role: "close",
+            label: t("Close Window"),
             accelerator: "",
             click: () => {
                 focusedWaveWindow?.close();
@@ -147,7 +165,7 @@ function makeFileMenu(
     const featureWaveAppBuilder = fullConfig?.settings?.["feature:waveappbuilder"];
     if (isDev || featureWaveAppBuilder) {
         fileMenu.splice(1, 0, {
-            label: "New WaveApp Builder Window",
+            label: t("New WaveApp Builder Window"),
             accelerator: unamePlatform === "darwin" ? "Command+Shift+B" : "Alt+Shift+B",
             click: () => openBuilderWindow(""),
         });
@@ -171,16 +189,16 @@ function makeFileMenu(
     return fileMenu;
 }
 
-function makeAppMenuItems(webContents: electron.WebContents): Electron.MenuItemConstructorOptions[] {
+function makeAppMenuItems(webContents: electron.WebContents, t: MenuTranslator): Electron.MenuItemConstructorOptions[] {
     const appMenuItems: Electron.MenuItemConstructorOptions[] = [
         {
-            label: "About Wave Terminal",
+            label: t("About Wave Terminal"),
             click: (_, window) => {
                 (getWindowWebContents(window) ?? webContents)?.send("menu-item-about");
             },
         },
         {
-            label: "Check for Updates",
+            label: t("Check for Updates"),
             click: () => {
                 fireAndForget(() => updater?.checkForUpdates(true));
             },
@@ -189,14 +207,14 @@ function makeAppMenuItems(webContents: electron.WebContents): Electron.MenuItemC
     ];
     if (unamePlatform === "darwin") {
         appMenuItems.push(
-            { role: "services" },
+            { role: "services", label: t("Services") },
             { type: "separator" },
-            { role: "hide" },
-            { role: "hideOthers" },
+            { role: "hide", label: t("Hide Wave") },
+            { role: "hideOthers", label: t("Hide Others") },
             { type: "separator" }
         );
     }
-    appMenuItems.push({ role: "quit" });
+    appMenuItems.push({ role: "quit", label: t("Quit") });
     return appMenuItems;
 }
 
@@ -204,27 +222,28 @@ function makeViewMenu(
     webContents: electron.WebContents,
     callbacks: AppMenuCallbacks,
     isBuilderWindowFocused: boolean,
-    fullscreenOnLaunch: boolean
+    fullscreenOnLaunch: boolean,
+    t: MenuTranslator
 ): Electron.MenuItemConstructorOptions[] {
     const devToolsAccel = unamePlatform === "darwin" ? "Option+Command+I" : "Alt+Shift+I";
     return [
         {
-            label: isBuilderWindowFocused ? "Reload Window" : "Reload Tab",
+            label: t(isBuilderWindowFocused ? "Reload Window" : "Reload Tab"),
             accelerator: "Shift+CommandOrControl+R",
             click: (_, window) => {
                 (getWindowWebContents(window) ?? webContents)?.reloadIgnoringCache();
             },
         },
         {
-            label: "Relaunch All Windows",
+            label: t("Relaunch All Windows"),
             click: () => callbacks.relaunchBrowserWindows(),
         },
         {
-            label: "Clear Tab Cache",
+            label: t("Clear Tab Cache"),
             click: () => clearTabCache(),
         },
         {
-            label: "Toggle DevTools",
+            label: t("Toggle DevTools"),
             accelerator: devToolsAccel,
             click: (_, window) => {
                 const wc = getWindowWebContents(window) ?? webContents;
@@ -233,7 +252,7 @@ function makeViewMenu(
         },
         { type: "separator" },
         {
-            label: "Reset Zoom",
+            label: t("Reset Zoom"),
             accelerator: "CommandOrControl+0",
             click: (_, window) => {
                 const wc = getWindowWebContents(window) ?? webContents;
@@ -243,7 +262,7 @@ function makeViewMenu(
             },
         },
         {
-            label: "Zoom In",
+            label: t("Zoom In"),
             accelerator: "CommandOrControl+=",
             click: (_, window) => {
                 const wc = getWindowWebContents(window) ?? webContents;
@@ -265,7 +284,7 @@ function makeViewMenu(
             acceleratorWorksWhenHidden: true,
         },
         {
-            label: "Zoom Out",
+            label: t("Zoom Out"),
             accelerator: "CommandOrControl+-",
             click: (_, window) => {
                 const wc = getWindowWebContents(window) ?? webContents;
@@ -287,10 +306,10 @@ function makeViewMenu(
             acceleratorWorksWhenHidden: true,
         },
         {
-            label: "Launch On Full Screen",
+            label: t("Launch On Full Screen"),
             submenu: [
                 {
-                    label: "On",
+                    label: t("On"),
                     type: "radio",
                     checked: fullscreenOnLaunch,
                     click: () => {
@@ -298,7 +317,7 @@ function makeViewMenu(
                     },
                 },
                 {
-                    label: "Off",
+                    label: t("Off"),
                     type: "radio",
                     checked: !fullscreenOnLaunch,
                     click: () => {
@@ -310,10 +329,11 @@ function makeViewMenu(
         { type: "separator" },
         {
             role: "togglefullscreen",
+            label: t("Enter Full Screen"),
         },
         { type: "separator" },
         {
-            label: "Toggle Widgets Bar",
+            label: t("Toggle Widgets Bar"),
             click: () => {
                 fireAndForget(async () => {
                     const workspaceId = focusedWaveWindow?.workspaceId;
@@ -321,7 +341,10 @@ function makeViewMenu(
                     const oref = `workspace:${workspaceId}`;
                     const meta = await RpcApi.GetMetaCommand(ElectronWshClient, { oref });
                     const current = meta?.["layout:widgetsvisible"] ?? true;
-                    await RpcApi.SetMetaCommand(ElectronWshClient, { oref, meta: { "layout:widgetsvisible": !current } });
+                    await RpcApi.SetMetaCommand(ElectronWshClient, {
+                        oref,
+                        meta: { "layout:widgetsvisible": !current },
+                    });
                 });
             },
         },
@@ -331,7 +354,6 @@ function makeViewMenu(
 async function makeFullAppMenu(callbacks: AppMenuCallbacks, workspaceOrBuilderId?: string): Promise<Electron.Menu> {
     const numWaveWindows = getAllWaveWindows().length;
     const webContents = workspaceOrBuilderId && getWebContentsByWorkspaceOrBuilderId(workspaceOrBuilderId);
-    const appMenuItems = makeAppMenuItems(webContents);
 
     const isBuilderWindowFocused = focusedBuilderWindow != null;
     let fullscreenOnLaunch = false;
@@ -342,36 +364,41 @@ async function makeFullAppMenu(callbacks: AppMenuCallbacks, workspaceOrBuilderId
     } catch (e) {
         console.error("Error fetching config:", e);
     }
-    const editMenu = makeEditMenu(fullConfig);
-    const fileMenu = makeFileMenu(numWaveWindows, callbacks, fullConfig);
-    const viewMenu = makeViewMenu(webContents, callbacks, isBuilderWindowFocused, fullscreenOnLaunch);
+    const locale = resolveLocale(fullConfig?.settings?.["app:language"]);
+    setMainProcessLanguage(fullConfig?.settings?.["app:language"]);
+    const t: MenuTranslator = (message) => translate(locale, message);
+    const appMenuItems = makeAppMenuItems(webContents, t);
+    const editMenu = makeEditMenu(fullConfig, t);
+    const fileMenu = makeFileMenu(numWaveWindows, callbacks, fullConfig, t);
+    const viewMenu = makeViewMenu(webContents, callbacks, isBuilderWindowFocused, fullscreenOnLaunch, t);
     let workspaceMenu: Electron.MenuItemConstructorOptions[] = null;
     try {
-        workspaceMenu = await getWorkspaceMenu();
+        workspaceMenu = await getWorkspaceMenu(t);
     } catch (e) {
         console.error("getWorkspaceMenu error:", e);
     }
     const windowMenu: Electron.MenuItemConstructorOptions[] = [
-        { role: "minimize", accelerator: "" },
-        { role: "zoom" },
+        { role: "minimize", label: t("Minimize"), accelerator: "" },
+        { role: "zoom", label: t("Zoom") },
         { type: "separator" },
-        { role: "front" },
+        { role: "front", label: t("Bring All to Front") },
     ];
     const menuTemplate: Electron.MenuItemConstructorOptions[] = [
         { role: "appMenu", submenu: appMenuItems },
-        { role: "fileMenu", submenu: fileMenu },
-        { role: "editMenu", submenu: editMenu },
-        { role: "viewMenu", submenu: viewMenu },
+        { role: "fileMenu", label: t("File"), submenu: fileMenu },
+        { role: "editMenu", label: t("Edit"), submenu: editMenu },
+        { role: "viewMenu", label: t("View"), submenu: viewMenu },
     ];
     if (workspaceMenu != null && !isBuilderWindowFocused) {
         menuTemplate.push({
-            label: "Workspace",
+            label: t("Workspace"),
             id: "workspace-menu",
             submenu: workspaceMenu,
         });
     }
     menuTemplate.push({
         role: "windowMenu",
+        label: t("Window"),
         submenu: windowMenu,
     });
     return electron.Menu.buildFromTemplate(menuTemplate);
@@ -403,6 +430,10 @@ function initMenuEventSubscriptions() {
         eventType: "workspace:update",
         handler: makeAndSetAppMenu,
     });
+    waveEventSubscribeSingle({
+        eventType: "config",
+        handler: makeAndSetAppMenu,
+    });
 }
 
 function getWebContentsByWorkspaceOrBuilderId(workspaceOrBuilderId: string): electron.WebContents {
@@ -417,6 +448,39 @@ function getWebContentsByWorkspaceOrBuilderId(workspaceOrBuilderId: string): ele
     }
 
     return null;
+}
+
+const menuIpc = createSecureIpcRegistrar(electron.ipcMain, (event, targetId) => {
+    if (typeof targetId !== "string") {
+        return false;
+    }
+    return getWebContentsByWorkspaceOrBuilderId(targetId)?.id === event.sender.id;
+});
+
+const ContextMenuTypes = new Set(["separator", "normal", "submenu", "checkbox", "radio", "header"]);
+
+function isValidContextMenuDefinitions(value: unknown, depth = 0, budget = { remaining: 200 }): boolean {
+    if (!Array.isArray(value) || depth > 5 || value.length > 100) return false;
+    for (const item of value) {
+        if (budget.remaining-- <= 0 || item == null || typeof item !== "object") return false;
+        const menuItem = item as Record<string, unknown>;
+        if (
+            typeof menuItem.id !== "string" ||
+            menuItem.id.length > 256 ||
+            typeof menuItem.label !== "string" ||
+            menuItem.label.length > 1024 ||
+            (menuItem.role != null && (typeof menuItem.role !== "string" || menuItem.role.length > 64)) ||
+            (menuItem.type != null && (typeof menuItem.type !== "string" || !ContextMenuTypes.has(menuItem.type))) ||
+            (menuItem.checked != null && typeof menuItem.checked !== "boolean") ||
+            (menuItem.enabled != null && typeof menuItem.enabled !== "boolean")
+        ) {
+            return false;
+        }
+        if (menuItem.submenu != null && !isValidContextMenuDefinitions(menuItem.submenu, depth + 1, budget)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 function convertMenuDefArrToMenu(
@@ -446,7 +510,7 @@ function convertMenuDefArrToMenu(
     return electron.Menu.buildFromTemplate(menuItems);
 }
 
-electron.ipcMain.on(
+menuIpc.on(
     "contextmenu-show",
     (event, workspaceOrBuilderId: string, menuDefArr: ElectronContextMenuItem[]) => {
         const webContents = getWebContentsByWorkspaceOrBuilderId(workspaceOrBuilderId);
@@ -472,10 +536,12 @@ electron.ipcMain.on(
             });
         });
         event.returnValue = true;
-    }
+    },
+    (workspaceOrBuilderId, menuDefArr) =>
+        typeof workspaceOrBuilderId === "string" && isValidContextMenuDefinitions(menuDefArr)
 );
 
-electron.ipcMain.on("workspace-appmenu-show", (event, workspaceId: string) => {
+menuIpc.on("workspace-appmenu-show", (event, workspaceId: string) => {
     fireAndForget(async () => {
         const webContents = getWebContentsByWorkspaceOrBuilderId(workspaceId);
         if (!webContents) {
@@ -488,7 +554,7 @@ electron.ipcMain.on("workspace-appmenu-show", (event, workspaceId: string) => {
     event.returnValue = true;
 });
 
-electron.ipcMain.on("builder-appmenu-show", (event, builderId: string) => {
+menuIpc.on("builder-appmenu-show", (event, builderId: string) => {
     fireAndForget(async () => {
         const webContents = getWebContentsByWorkspaceOrBuilderId(builderId);
         if (!webContents) {
@@ -501,17 +567,16 @@ electron.ipcMain.on("builder-appmenu-show", (event, builderId: string) => {
     event.returnValue = true;
 });
 
-const dockMenu = electron.Menu.buildFromTemplate([
-    {
-        label: "New Window",
-        click() {
-            fireAndForget(createNewWaveWindow);
-        },
-    },
-]);
-
 function makeDockTaskbar() {
     if (unamePlatform == "darwin") {
+        const dockMenu = electron.Menu.buildFromTemplate([
+            {
+                label: tMain("New Window"),
+                click() {
+                    fireAndForget(createNewWaveWindow);
+                },
+            },
+        ]);
         electron.app.dock.setMenu(dockMenu);
     }
 }

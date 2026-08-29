@@ -3,6 +3,7 @@
 
 import logoUrl from "@/app/asset/logo.svg?url";
 import type { BlockNodeModel } from "@/app/block/blocktypes";
+import { useTranslation } from "@/app/i18n/use-i18n";
 import { atoms, globalStore, replaceBlock } from "@/app/store/global";
 import type { TabModel } from "@/app/store/tab-model";
 import { checkKeyPressed, keydownWrapper } from "@/util/keyutil";
@@ -138,6 +139,7 @@ export class LauncherViewModel implements ViewModel {
 }
 
 function LauncherView({ blockId, model }: ViewComponentProps<LauncherViewModel>) {
+    const { t } = useTranslation();
     // Search and selection state
     const [searchTerm, setSearchTerm] = useAtom(model.searchTerm);
     const [selectedIndex, setSelectedIndex] = useAtom(model.selectedIndex);
@@ -219,7 +221,7 @@ function LauncherView({ blockId, model }: ViewComponentProps<LauncherViewModel>)
                 onKeyDown={keydownWrapper(model.keyDownHandler.bind(model))}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="sr-only dummy"
-                aria-label="Search widgets"
+                aria-label={t("Search widgets")}
             />
 
             {/* Logo */}
@@ -272,11 +274,12 @@ function LauncherView({ blockId, model }: ViewComponentProps<LauncherViewModel>)
             {/* Search instructions */}
             <div className="mt-4 text-secondary text-xs">
                 {filteredWidgets.length === 0 ? (
-                    <span>No widgets found. Press Escape to clear search.</span>
+                    <span>{t("No widgets found. Press Escape to clear search.")}</span>
                 ) : (
                     <span>
-                        {searchTerm == "" ? "Type to Filter" : "Searching " + '"' + searchTerm + '"'}, Enter to Launch,
-                        {searchTerm == "" ? "Arrow Keys to Navigate" : null}
+                        {searchTerm == "" ? t("Type to Filter") : t('Searching "{{search}}"', { search: searchTerm })}
+                        {t(", Enter to Launch")}
+                        {searchTerm == "" ? t(", Arrow Keys to Navigate") : null}
                     </span>
                 )}
             </div>

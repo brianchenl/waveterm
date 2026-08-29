@@ -11,6 +11,8 @@ const dlog = debug("wave:ws");
 
 const WarnWebSocketSendSize = 1024 * 1024; // 1MB
 const MaxWebSocketSendSize = 5 * 1024 * 1024; // 5MB
+const MaxQueuedWebSocketMessages = 256;
+const MaxQueuedWebSocketBytes = 8 * 1024 * 1024; // 8MB
 const reconnectHandlers: (() => void)[] = [];
 const StableConnTime = 2000;
 
@@ -31,12 +33,29 @@ type ElectronOverrideOpts = {
     authKey: string;
 };
 
+type QueuedMessage = {
+    data: WSCommandType;
+    byteSize: number;
+    priority: "normal" | "high";
+};
+
+type WSQueueStats = {
+    queuedMessages: number;
+    queuedBytes: number;
+    droppedMessages: number;
+    droppedBytes: number;
+};
+
 class WSControl {
     wsConn: WebSocket;
     open: boolean;
     opening: boolean = false;
     reconnectTimes: number = 0;
-    msgQueue: any[] = [];
+    msgQueue: QueuedMessage[] = [];
+    msgQueueBytes: number = 0;
+    queueLimitWarningShown: boolean = false;
+    droppedMessageCount: number = 0;
+    droppedMessageBytes: number = 0;
     stableId: string;
     messageCallback: WSEventCallback;
     watchSessionId: string = null;
@@ -47,6 +66,9 @@ class WSControl {
     eoOpts: ElectronOverrideOpts;
     noReconnect: boolean = false;
     onOpenTimeoutId: NodeJS.Timeout = null;
+    pingIntervalId: NodeJS.Timeout = null;
+    reconnectTimeoutId: NodeJS.Timeout = null;
+    queueTimeoutId: NodeJS.Timeout = null;
 
     constructor(
         baseHostPort: string,
@@ -59,16 +81,38 @@ class WSControl {
         this.stableId = stableId;
         this.open = false;
         this.eoOpts = electronOverrideOpts;
-        setInterval(this.sendPing.bind(this), 5000);
+        this.pingIntervalId = setInterval(this.sendPing.bind(this), 5000);
     }
 
     shutdown() {
         this.noReconnect = true;
-        this.wsConn.close();
+        this.open = false;
+        this.opening = false;
+        this.msgQueue = [];
+        this.msgQueueBytes = 0;
+        this.queueLimitWarningShown = false;
+        clearInterval(this.pingIntervalId);
+        clearTimeout(this.onOpenTimeoutId);
+        clearTimeout(this.reconnectTimeoutId);
+        clearTimeout(this.queueTimeoutId);
+        this.pingIntervalId = null;
+        this.onOpenTimeoutId = null;
+        this.reconnectTimeoutId = null;
+        this.queueTimeoutId = null;
+        this.wsConn?.close();
+    }
+
+    getQueueStats(): WSQueueStats {
+        return {
+            queuedMessages: this.msgQueue.length,
+            queuedBytes: this.msgQueueBytes,
+            droppedMessages: this.droppedMessageCount,
+            droppedBytes: this.droppedMessageBytes,
+        };
     }
 
     connectNow(desc: string) {
-        if (this.open || this.noReconnect) {
+        if (this.open || this.opening || this.noReconnect) {
             return;
         }
         this.lastReconnectTime = Date.now();
@@ -108,6 +152,12 @@ class WSControl {
         this.reconnectTimes++;
         if (this.reconnectTimes > 20) {
             dlog("cannot connect, giving up");
+            this.noReconnect = true;
+            this.msgQueue = [];
+            this.msgQueueBytes = 0;
+            this.queueLimitWarningShown = false;
+            clearInterval(this.pingIntervalId);
+            this.pingIntervalId = null;
             return;
         }
         const timeoutArr = [0, 0, 2, 5, 10, 10, 30, 60];
@@ -121,7 +171,9 @@ class WSControl {
         if (timeout > 0) {
             dlog(sprintf("sleeping %ds", timeout));
         }
-        setTimeout(() => {
+        clearTimeout(this.reconnectTimeoutId);
+        this.reconnectTimeoutId = setTimeout(() => {
+            this.reconnectTimeoutId = null;
             this.connectNow(String(this.reconnectTimes));
         }, timeout * 1000);
     }
@@ -130,6 +182,7 @@ class WSControl {
         // console.log("close", event);
         if (this.onOpenTimeoutId) {
             clearTimeout(this.onOpenTimeoutId);
+            this.onOpenTimeoutId = null;
         }
         if (event.wasClean) {
             dlog("connection closed");
@@ -144,6 +197,10 @@ class WSControl {
     }
 
     onopen(e: Event) {
+        if (this.noReconnect) {
+            this.wsConn?.close();
+            return;
+        }
         dlog("connection open");
         this.open = true;
         this.opening = false;
@@ -165,16 +222,26 @@ class WSControl {
             return;
         }
         const msg = this.msgQueue.shift();
-        this.sendMessage(msg);
-        setTimeout(() => {
+        this.msgQueueBytes -= msg.byteSize;
+        if (this.msgQueue.length < MaxQueuedWebSocketMessages / 2 && this.msgQueueBytes < MaxQueuedWebSocketBytes / 2) {
+            this.queueLimitWarningShown = false;
+        }
+        this.sendMessage(msg.data);
+        this.queueTimeoutId = setTimeout(() => {
+            this.queueTimeoutId = null;
             this.runMsgQueue();
         }, 100);
     }
 
     onmessage(event: MessageEvent) {
         let eventData = null;
-        if (event.data != null) {
-            eventData = JSON.parse(event.data);
+        try {
+            if (event.data != null) {
+                eventData = JSON.parse(event.data);
+            }
+        } catch (error) {
+            console.warn("ignoring malformed websocket message", error);
+            return;
         }
         if (eventData == null) {
             return;
@@ -207,19 +274,54 @@ class WSControl {
         if (!this.open) {
             return;
         }
-        const msg = JSON.stringify(data);
-        const byteSize = new Blob([msg]).size;
+        const serialized = this.serializeMessage(data);
+        if (serialized == null) {
+            return;
+        }
+        const { msg } = serialized;
+        this.wsConn.send(msg);
+    }
+
+    private serializeMessage(data: WSCommandType): { msg: string; byteSize: number } | null {
+        let msg: string;
+        try {
+            msg = JSON.stringify(data);
+        } catch (error) {
+            console.warn("failed to serialize websocket message", error);
+            return null;
+        }
+        const byteSize = new TextEncoder().encode(msg).byteLength;
         if (byteSize > MaxWebSocketSendSize) {
             console.log("ws message too large", byteSize, data.wscommand, msg.substring(0, 100));
-            return;
+            return null;
         }
         if (byteSize > WarnWebSocketSendSize) {
             console.log("ws message large", byteSize, data.wscommand, msg.substring(0, 100));
         }
-        this.wsConn.send(msg);
+        return { msg, byteSize };
+    }
+
+    private getMessagePriority(data: WSCommandType): "normal" | "high" {
+        if (data.wscommand !== "rpc") {
+            return "normal";
+        }
+        const message = data.message;
+        return message?.reqid || message?.resid || message?.cancel ? "high" : "normal";
+    }
+
+    private recordDroppedMessage(byteSize: number): void {
+        this.droppedMessageCount++;
+        this.droppedMessageBytes += byteSize;
+        if (!this.queueLimitWarningShown) {
+            console.warn("websocket queue limit reached; dropping queued message");
+            this.queueLimitWarningShown = true;
+        }
     }
 
     pushMessage(data: WSCommandType) {
+        if (this.noReconnect) {
+            return;
+        }
         if (!this.open) {
             if (data.wscommand === "rpc" && data.message) {
                 const cmd = data.message.command;
@@ -227,7 +329,32 @@ class WSControl {
                     return;
                 }
             }
-            this.msgQueue.push(data);
+            const serialized = this.serializeMessage(data);
+            if (serialized == null) {
+                return;
+            }
+            const priority = this.getMessagePriority(data);
+            let wouldExceedLimit =
+                this.msgQueue.length >= MaxQueuedWebSocketMessages ||
+                this.msgQueueBytes + serialized.byteSize > MaxQueuedWebSocketBytes;
+            while (wouldExceedLimit && priority === "high") {
+                const normalIndex = this.msgQueue.findIndex((message) => message.priority === "normal");
+                if (normalIndex < 0) {
+                    break;
+                }
+                const [evicted] = this.msgQueue.splice(normalIndex, 1);
+                this.msgQueueBytes -= evicted.byteSize;
+                this.recordDroppedMessage(evicted.byteSize);
+                wouldExceedLimit =
+                    this.msgQueue.length >= MaxQueuedWebSocketMessages ||
+                    this.msgQueueBytes + serialized.byteSize > MaxQueuedWebSocketBytes;
+            }
+            if (wouldExceedLimit) {
+                this.recordDroppedMessage(serialized.byteSize);
+                return;
+            }
+            this.msgQueue.push({ data, byteSize: serialized.byteSize, priority });
+            this.msgQueueBytes += serialized.byteSize;
             return;
         }
         this.sendMessage(data);
@@ -254,6 +381,8 @@ function sendWSCommand(cmd: WSCommandType) {
 }
 
 export {
+    MaxQueuedWebSocketBytes,
+    MaxQueuedWebSocketMessages,
     WSControl,
     addWSReconnectHandler,
     globalWS,
@@ -262,4 +391,5 @@ export {
     sendRawRpcMessage,
     sendWSCommand,
     type ElectronOverrideOpts,
+    type WSQueueStats,
 };

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { App } from "@/app/app";
-import { loadMonaco } from "@/app/monaco/monaco-env";
+import { publishRendererPerformance, startRendererPerformanceMonitor } from "@/app/performance/renderer-performance";
 import { loadBadges } from "@/app/store/badge";
 import { GlobalModel } from "@/app/store/global-model";
 import {
@@ -16,7 +16,6 @@ import { modalsModel } from "@/app/store/modalmodel";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { makeBuilderRouteId, makeTabRouteId } from "@/app/store/wshrouter";
 import { initWshrpc, TabRpcClient } from "@/app/store/wshrpcutil";
-import { BuilderApp } from "@/builder/builder-app";
 import { getLayoutModelForStaticTab } from "@/layout/index";
 import { countersClear, countersPrint } from "@/store/counters";
 import {
@@ -37,6 +36,14 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 
 const platform = getApi().getPlatform();
+const rendererPerformanceMonitor = startRendererPerformanceMonitor();
+let rendererPerformancePublished = false;
+
+function publishFirstRenderPerformance() {
+    if (rendererPerformancePublished) return;
+    rendererPerformancePublished = true;
+    publishRendererPerformance(rendererPerformanceMonitor.finish(), (message) => getApi().sendLog(message));
+}
 document.title = `Wave Terminal`;
 let savedInitOpts: WaveInitOpts = null;
 
@@ -190,7 +197,6 @@ async function initWave(initOpts: WaveInitOpts) {
     registerGlobalKeys();
     registerElectronReinjectKeyHandler();
     registerControlShiftStateUpdateHandler();
-    await loadMonaco();
     const fullConfig = await RpcApi.GetFullConfigCommand(TabRpcClient);
     console.log("fullconfig", fullConfig);
     globalStore.set(atoms.fullConfigAtom, fullConfig);
@@ -206,6 +212,7 @@ async function initWave(initOpts: WaveInitOpts) {
     const root = createRoot(elem);
     root.render(reactElem);
     await firstRenderPromise;
+    publishFirstRenderPerformance();
     console.log("Wave First Render Done");
     getApi().setWindowInitStatus("wave-ready");
 }
@@ -224,6 +231,7 @@ async function initBuilderWrap(initOpts: BuilderInitOpts) {
 }
 
 async function initBuilder(initOpts: BuilderInitOpts) {
+    const { BuilderApp } = await import("@/builder/builder-app");
     getApi().sendLog("Init Builder " + JSON.stringify(initOpts));
     const globalInitOpts: GlobalInitOptions = {
         clientId: initOpts.clientId,
@@ -261,7 +269,6 @@ async function initBuilder(initOpts: BuilderInitOpts) {
 
     registerBuilderGlobalKeys();
     registerElectronReinjectKeyHandler();
-    await loadMonaco();
     const fullConfig = await RpcApi.GetFullConfigCommand(TabRpcClient);
     console.log("fullconfig", fullConfig);
     globalStore.set(atoms.fullConfigAtom, fullConfig);
@@ -278,5 +285,6 @@ async function initBuilder(initOpts: BuilderInitOpts) {
     const root = createRoot(elem);
     root.render(reactElem);
     await firstRenderPromise;
+    publishFirstRenderPerformance();
     console.log("Tsunami Builder First Render Done");
 }

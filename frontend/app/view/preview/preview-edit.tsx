@@ -8,7 +8,6 @@ import { adaptFromReactOrNativeKeyEvent, checkKeyPressed } from "@/util/keyutil"
 import { fireAndForget } from "@/util/util";
 import { useAtomValue, useSetAtom } from "jotai";
 import type * as MonacoTypes from "monaco-editor";
-import * as monaco from "monaco-editor";
 import { useEffect } from "react";
 import type { SpecializedViewProps } from "./preview";
 
@@ -73,7 +72,7 @@ function CodeEditPreview({ model }: SpecializedViewProps) {
         };
     }, []);
 
-    function onMount(editor: MonacoTypes.editor.IStandaloneCodeEditor, monacoApi: typeof monaco): () => void {
+    function onMount(editor: MonacoTypes.editor.IStandaloneCodeEditor, monacoApi: typeof MonacoTypes): () => void {
         model.monacoRef.current = editor;
 
         const keyDownDisposer = editor.onKeyDown((e: MonacoTypes.IKeyboardEvent) => {

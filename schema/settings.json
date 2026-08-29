@@ -50,6 +50,14 @@
             "left"
           ]
         },
+        "app:language": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "en-US",
+            "zh-CN"
+          ]
+        },
         "feature:waveappbuilder": {
           "type": "boolean"
         },

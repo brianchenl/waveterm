@@ -3,6 +3,7 @@
 
 import { Button } from "@/app/element/button";
 import { CenteredDiv } from "@/app/element/quickelems";
+import { useTranslation } from "@/app/i18n/use-i18n";
 import { globalStore } from "@/app/store/jotaiStore";
 import { getWebServerEndpoint } from "@/util/endpoints";
 import { formatRemoteUri } from "@/util/waveutil";
@@ -12,17 +13,18 @@ import { TransformComponent, TransformWrapper, useControls } from "react-zoom-pa
 import type { SpecializedViewProps } from "./preview";
 
 function ImageZoomControls() {
+    const { t } = useTranslation();
     const { zoomIn, zoomOut, resetTransform } = useControls();
 
     return (
         <div className="absolute flex flex-row z-[2] top-0 right-0 p-[5px] gap-1">
-            <Button onClick={() => zoomIn()} title="Zoom In" className="py-1 px-[5px]">
+            <Button onClick={() => zoomIn()} title={t("Zoom In")} className="py-1 px-[5px]">
                 <i className="fa-sharp fa-plus" />
             </Button>
-            <Button onClick={() => zoomOut()} title="Zoom Out" className="py-1 px-[5px]">
+            <Button onClick={() => zoomOut()} title={t("Zoom Out")} className="py-1 px-[5px]">
                 <i className="fa-sharp fa-minus" />
             </Button>
-            <Button onClick={() => resetTransform()} title="Reset Zoom" className="py-1 px-[5px]">
+            <Button onClick={() => resetTransform()} title={t("Reset Zoom")} className="py-1 px-[5px]">
                 <i className="fa-sharp fa-rotate-left" />
             </Button>
         </div>
@@ -47,6 +49,7 @@ function StreamingImagePreview({ url }: { url: string }) {
 }
 
 function StreamingPreview({ model }: SpecializedViewProps) {
+    const { t } = useTranslation();
     useEffect(() => {
         model.refreshCallback = () => {
             globalStore.set(model.refreshVersion, (v) => v + 1);
@@ -86,7 +89,7 @@ function StreamingPreview({ model }: SpecializedViewProps) {
     if (fileInfo.mimetype.startsWith("image/")) {
         return <StreamingImagePreview url={streamingUrl} />;
     }
-    return <CenteredDiv>Preview Not Supported</CenteredDiv>;
+    return <CenteredDiv>{t("Preview Not Supported")}</CenteredDiv>;
 }
 
 export { StreamingPreview };

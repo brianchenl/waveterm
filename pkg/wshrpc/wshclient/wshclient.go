@@ -23,6 +23,12 @@ func ActivityCommand(w *wshutil.WshRpc, data wshrpc.ActivityUpdate, opts *wshrpc
 	return err
 }
 
+// command "aiprovidertest", wshserver.AIProviderTestCommand
+func AIProviderTestCommand(w *wshutil.WshRpc, data wshrpc.CommandAIProviderTestData, opts *wshrpc.RpcOpts) (*wshrpc.CommandAIProviderTestRtnData, error) {
+	resp, err := sendRpcRequestCallHelper[*wshrpc.CommandAIProviderTestRtnData](w, "aiprovidertest", data, opts)
+	return resp, err
+}
+
 // command "aisendmessage", wshserver.AiSendMessageCommand
 func AiSendMessageCommand(w *wshutil.WshRpc, data wshrpc.AiMessageData, opts *wshrpc.RpcOpts) error {
 	_, err := sendRpcRequestCallHelper[any](w, "aisendmessage", data, opts)
@@ -1015,6 +1021,12 @@ func WaveInfoCommand(w *wshutil.WshRpc, opts *wshrpc.RpcOpts) (*wshrpc.WaveInfoD
 // command "webselector", wshserver.WebSelectorCommand
 func WebSelectorCommand(w *wshutil.WshRpc, data wshrpc.CommandWebSelectorData, opts *wshrpc.RpcOpts) ([]string, error) {
 	resp, err := sendRpcRequestCallHelper[[]string](w, "webselector", data, opts)
+	return resp, err
+}
+
+// command "windowsdiagnostics", wshserver.WindowsDiagnosticsCommand
+func WindowsDiagnosticsCommand(w *wshutil.WshRpc, data wshrpc.CommandWindowsDiagnosticsData, opts *wshrpc.RpcOpts) (*wshrpc.CommandWindowsDiagnosticsRtnData, error) {
+	resp, err := sendRpcRequestCallHelper[*wshrpc.CommandWindowsDiagnosticsRtnData](w, "windowsdiagnostics", data, opts)
 	return resp, err
 }
 

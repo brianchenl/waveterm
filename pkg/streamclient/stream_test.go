@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -328,6 +329,46 @@ func TestOutOfOrderPackets(t *testing.T) {
 	}
 }
 
+func TestReaderRejectsPayloadBeyondReceiveWindow(t *testing.T) {
+	transport := newFakeTransport()
+	reader := NewReader("window-limit", 4, transport)
+	reader.RecvData(wshrpc.CommandStreamData{
+		Id:     "window-limit",
+		Seq:    0,
+		Data64: base64.StdEncoding.EncodeToString([]byte("12345")),
+	})
+
+	buf := make([]byte, 8)
+	if _, err := reader.Read(buf); err == nil || !strings.Contains(err.Error(), "receive window") {
+		t.Fatalf("expected receive-window error, got %v", err)
+	}
+	select {
+	case ack := <-transport.ackChan:
+		if !ack.Cancel {
+			t.Fatal("protocol violation should cancel stream")
+		}
+	default:
+		t.Fatal("protocol violation did not send cancellation ack")
+	}
+}
+
+func TestReaderLimitsOutOfOrderPackets(t *testing.T) {
+	transport := newFakeTransport()
+	reader := NewReader("ooo-limit", 4096, transport)
+	for i := 0; i <= MaxOutOfOrderPackets; i++ {
+		reader.RecvData(wshrpc.CommandStreamData{
+			Id:     "ooo-limit",
+			Seq:    int64(i + 1),
+			Data64: base64.StdEncoding.EncodeToString([]byte("x")),
+		})
+	}
+
+	buf := make([]byte, 1)
+	if _, err := reader.Read(buf); err == nil || !strings.Contains(err.Error(), "out-of-order") {
+		t.Fatalf("expected out-of-order limit error, got %v", err)
+	}
+}
+
 func TestOutOfOrderWithDuplicates(t *testing.T) {
 	transport := newFakeTransport()
 	reader := NewReader("test-dup", 1024, transport)
@@ -365,12 +406,12 @@ func TestOutOfOrderWithDuplicates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read failed: %v", err)
 	}
-	
+
 	// Should get all 15 bytes (3 packets * 5 bytes)
 	if n != 15 {
 		t.Fatalf("Expected to read 15 bytes, got %d", n)
 	}
-	
+
 	// Should be "aaaaaxxxxxccccc" (first packet received for each seq wins)
 	expected := "aaaaaxxxxxccccc"
 	if string(buf[:n]) != expected {
@@ -406,7 +447,7 @@ func TestOutOfOrderWithGaps(t *testing.T) {
 	reader.RecvData(packet0)
 	reader.RecvData(packet40) // Way ahead - should be buffered
 	reader.RecvData(packet20) // Still ahead - should be buffered
-	
+
 	// Read first packet
 	buf := make([]byte, 10)
 	n, err := reader.Read(buf)
@@ -509,7 +550,7 @@ func TestOutOfOrderWithEOF(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read failed: %v", err)
 	}
-	
+
 	expected := "firstsecondthird"
 	if string(buf[:n]) != expected {
 		t.Fatalf("Expected %q, got %q", expected, string(buf[:n]))

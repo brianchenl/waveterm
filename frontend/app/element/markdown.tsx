@@ -10,7 +10,8 @@ import {
     transformBlocks,
 } from "@/app/element/markdown-util";
 import remarkMermaidToTag from "@/app/element/remark-mermaid-to-tag";
-import { boundNumber, useAtomValueSafe, cn } from "@/util/util";
+import { useTranslation } from "@/app/i18n/use-i18n";
+import { boundNumber, cn, useAtomValueSafe } from "@/util/util";
 import clsx from "clsx";
 import { Atom } from "jotai";
 import { OverlayScrollbarsComponent, OverlayScrollbarsComponentRef } from "overlayscrollbars-react";
@@ -136,6 +137,7 @@ type CodeBlockProps = {
 };
 
 const CodeBlock = ({ children, onClickExecute }: CodeBlockProps) => {
+    const { t } = useTranslation();
     const getTextContent = (children: any): string => {
         if (typeof children === "string") {
             return children;
@@ -166,7 +168,7 @@ const CodeBlock = ({ children, onClickExecute }: CodeBlockProps) => {
         <pre className="codeblock">
             {children}
             <div className="codeblock-actions">
-                <CopyButton onClick={handleCopy} title="Copy" />
+                <CopyButton onClick={handleCopy} title={t("Copy")} />
                 {onClickExecute && (
                     <IconButton
                         decl={{

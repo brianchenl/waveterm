@@ -1,7 +1,9 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { preloadAIPanel } from "@/app/aipanel/aipanel-loader";
 import { Tooltip } from "@/app/element/tooltip";
+import { useTranslation } from "@/app/i18n/use-i18n";
 import { getTabBadgeAtom } from "@/app/store/badge";
 import { getTabModelByTabId } from "@/app/store/tab-model";
 import { makeORef } from "@/app/store/wos";
@@ -20,6 +22,7 @@ import { WorkspaceSwitcher } from "./workspaceswitcher";
 export type { VTabItem } from "./vtab";
 
 const VTabBarAIButton = memo(() => {
+    const { t } = useTranslation();
     const env = useWaveEnv<VTabBarEnv>();
     const aiPanelOpen = useAtomValue(WorkspaceLayoutModel.getInstance().panelVisibleAtom);
     const hideAiButton = useAtomValue(env.getSettingsKeyAtom("app:hideaibutton"));
@@ -35,12 +38,13 @@ const VTabBarAIButton = memo(() => {
 
     return (
         <Tooltip
-            content="Toggle Wave AI Panel"
+            content={t("Toggle Wave AI Panel")}
             placement="bottom"
             hideOnClick
             divClassName={`flex h-[22px] px-3.5 justify-end mb-1 items-center rounded-md mr-1 box-border cursor-pointer bg-hover hover:bg-hoverbg transition-colors text-[12px] ${aiPanelOpen ? "text-accent" : "text-secondary"}`}
             divStyle={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
             divOnClick={onClick}
+            divOnPointerEnter={() => void preloadAIPanel().catch((error) => console.error("AI preload failed", error))}
         >
             <i className="fa fa-sparkles" />
         </Tooltip>
@@ -49,6 +53,7 @@ const VTabBarAIButton = memo(() => {
 VTabBarAIButton.displayName = "VTabBarAIButton";
 
 const MacOSHeader = memo(() => {
+    const { t } = useTranslation();
     const env = useWaveEnv<VTabBarEnv>();
     const isFullScreen = useAtomValue(env.atoms.isFullScreen);
     return (
@@ -69,7 +74,12 @@ const MacOSHeader = memo(() => {
                 style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
             >
                 <VTabBarAIButton />
-                <Tooltip content="Workspace Switcher" placement="bottom" hideOnClick divClassName="flex items-center">
+                <Tooltip
+                    content={t("Workspace Switcher")}
+                    placement="bottom"
+                    hideOnClick
+                    divClassName="flex items-center"
+                >
                     <WorkspaceSwitcher />
                 </Tooltip>
                 <UpdateStatusBanner />
@@ -185,6 +195,7 @@ function VTabWrapper({
 }
 
 export function VTabBar({ workspace, className }: VTabBarProps) {
+    const { t } = useTranslation();
     const env = useWaveEnv<VTabBarEnv>();
     const activeTabId = useAtomValue(env.atoms.staticTabId);
     const reinitVersion = useAtomValue(env.atoms.reinitVersion);
@@ -425,11 +436,11 @@ export function VTabBar({ workspace, className }: VTabBarProps) {
                 onClick={() => env.electron.createTab()}
                 onMouseEnter={() => setIsNewTabHovered(true)}
                 onMouseLeave={() => setIsNewTabHovered(false)}
-                aria-label="New Tab"
+                aria-label={t("New Tab")}
             >
                 <div className="pointer-events-none absolute inset-x-1 inset-y-[4px] rounded-sm bg-transparent transition-colors group-hover:bg-hover" />
                 <i className="fa fa-solid fa-plus" style={{ fontSize: "10px" }} />
-                <span>New Tab</span>
+                <span>{t("New Tab")}</span>
             </button>
         </div>
     );

@@ -101,10 +101,13 @@ func processChatStream(
 ) (*uctypes.WaveStopReason, *StoredChatMessage, error) {
 	decoder := eventsource.NewDecoder(body)
 	var textBuilder strings.Builder
+	var reasoningBuilder strings.Builder
 	msgID := uuid.New().String()
 	textID := uuid.New().String()
+	reasoningID := uuid.New().String()
 	var finishReason string
 	textStarted := false
+	reasoningStarted := false
 	var toolCallsInProgress []ToolCall
 
 	if cont == nil {
@@ -128,7 +131,7 @@ func processChatStream(
 				break
 			}
 			if sseHandler.Err() != nil {
-				partialMsg := extractPartialTextMessage(msgID, textBuilder.String())
+				partialMsg := extractPartialMessage(msgID, reasoningBuilder.String(), textBuilder.String())
 				return &uctypes.WaveStopReason{
 					Kind:      uctypes.StopKindCanceled,
 					ErrorType: "client_disconnect",
@@ -159,7 +162,20 @@ func processChatStream(
 		}
 
 		choice := chunk.Choices[0]
+		if choice.Delta.ReasoningContent != "" {
+			if !reasoningStarted {
+				reasoningID = uuid.New().String()
+				_ = sseHandler.AiMsgReasoningStart(reasoningID)
+				reasoningStarted = true
+			}
+			reasoningBuilder.WriteString(choice.Delta.ReasoningContent)
+			_ = sseHandler.AiMsgReasoningDelta(reasoningID, choice.Delta.ReasoningContent)
+		}
 		if choice.Delta.Content != "" {
+			if reasoningStarted {
+				_ = sseHandler.AiMsgReasoningEnd(reasoningID)
+				reasoningStarted = false
+			}
 			if !textStarted {
 				_ = sseHandler.AiMsgTextStart(textID)
 				textStarted = true
@@ -239,16 +255,19 @@ func processChatStream(
 	assistantMsg := &StoredChatMessage{
 		MessageId: msgID,
 		Message: ChatRequestMessage{
-			Role: "assistant",
+			Role:             "assistant",
+			Content:          textBuilder.String(),
+			ReasoningContent: reasoningBuilder.String(),
 		},
 	}
 
 	if len(validToolCalls) > 0 {
 		assistantMsg.Message.ToolCalls = validToolCalls
-	} else {
-		assistantMsg.Message.Content = textBuilder.String()
 	}
 
+	if reasoningStarted {
+		_ = sseHandler.AiMsgReasoningEnd(reasoningID)
+	}
 	if textStarted {
 		_ = sseHandler.AiMsgTextEnd(textID)
 	}
@@ -260,16 +279,17 @@ func processChatStream(
 	return stopReason, assistantMsg, nil
 }
 
-func extractPartialTextMessage(msgID string, text string) *StoredChatMessage {
-	if text == "" {
+func extractPartialMessage(msgID string, reasoning string, text string) *StoredChatMessage {
+	if reasoning == "" && text == "" {
 		return nil
 	}
 
 	return &StoredChatMessage{
 		MessageId: msgID,
 		Message: ChatRequestMessage{
-			Role:    "assistant",
-			Content: text,
+			Role:             "assistant",
+			Content:          text,
+			ReasoningContent: reasoning,
 		},
 	}
 }

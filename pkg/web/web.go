@@ -6,6 +6,7 @@ package web
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -57,6 +58,8 @@ const HttpWriteTimeout = 21 * time.Second
 const HttpMaxHeaderBytes = 60000
 const HttpTimeoutDuration = 21 * time.Second
 
+const MaxServiceRequestBodyBytes = 1024 * 1024
+
 const WSStateReconnectTime = 30 * time.Second
 const WSStatePacketChSize = 20
 
@@ -105,26 +108,34 @@ func (rw *notFoundBlockingResponseWriter) Write(b []byte) (int, error) {
 }
 
 func handleService(w http.ResponseWriter, r *http.Request) {
-	bodyData, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Unable to read request body", http.StatusBadRequest)
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 	defer r.Body.Close()
-	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+	r.Body = http.MaxBytesReader(w, r.Body, MaxServiceRequestBodyBytes)
+	bodyData, err := io.ReadAll(r.Body)
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "Unable to read request body", http.StatusBadRequest)
 		return
 	}
 	var webCall service.WebCallType
 	err = json.Unmarshal(bodyData, &webCall)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid request body: %v", err), http.StatusBadRequest)
+		return
 	}
 
 	rtn := service.CallService(r.Context(), webCall)
 	jsonRtn, err := json.Marshal(rtn)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("error serializing response: %v", err), http.StatusInternalServerError)
+		return
 	}
 	w.Header().Set(ContentTypeHeaderKey, ContentTypeJson)
 	w.Header().Set(ContentLengthHeaderKey, fmt.Sprintf("%d", len(jsonRtn)))
