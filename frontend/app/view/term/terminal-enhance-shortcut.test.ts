@@ -12,6 +12,7 @@ const harness = vi.hoisted(() => {
         shellIntegrationStatusAtom,
         shellIntegrationStatus: "ready" as string | null,
         isMacOS: true,
+        terminalTextarea: {} as object,
         blockComponentModel: null as BlockComponentModel | null,
         registerGlobalWebviewKeys: vi.fn(),
     };
@@ -93,7 +94,12 @@ function makeTerminalModel(sendDataToController: ReturnType<typeof vi.fn>, basic
     return {
         viewType: "term",
         enhanceCurrentCommand: (get: (atom: unknown) => unknown) => {
-            if (!basic || get(harness.shellIntegrationStatusAtom) !== "ready" || bufferType !== "normal") {
+            if (
+                !basic ||
+                get(harness.shellIntegrationStatusAtom) !== "ready" ||
+                bufferType !== "normal" ||
+                document.activeElement !== harness.terminalTextarea
+            ) {
                 return false;
             }
             sendDataToController("\x1b[24;2~");
@@ -109,7 +115,7 @@ describe("terminal inline enhancement shortcut", () => {
         harness.isMacOS = true;
         setKeyUtilPlatform("darwin");
         vi.stubGlobal("document", {
-            activeElement: null,
+            activeElement: harness.terminalTextarea,
             querySelector: vi.fn(() => null),
         });
         registerGlobalKeys();
@@ -201,6 +207,26 @@ describe("terminal inline enhancement shortcut", () => {
         harness.blockComponentModel = {
             viewModel: makeTerminalModel(sendDataToController, true, "alternate"),
         } as unknown as BlockComponentModel;
+
+        const handled = appHandleKeyDown({
+            type: "keydown",
+            key: "a",
+            code: "KeyA",
+            cmd: true,
+            meta: true,
+            shift: true,
+        });
+
+        expect(handled).toBe(true);
+        expect(sendDataToController).not.toHaveBeenCalled();
+    });
+
+    it("does not enhance a selected terminal while another input owns DOM focus", () => {
+        const sendDataToController = vi.fn();
+        harness.blockComponentModel = {
+            viewModel: makeTerminalModel(sendDataToController),
+        } as unknown as BlockComponentModel;
+        Object.defineProperty(document, "activeElement", { value: { role: "searchbox" }, configurable: true });
 
         const handled = appHandleKeyDown({
             type: "keydown",

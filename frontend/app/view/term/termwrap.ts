@@ -36,6 +36,7 @@ import {
     isClaudeCodeCommand,
     type ShellIntegrationStatus,
 } from "./osc-handlers";
+import { CmdEditBuffer, type CmdSuggestionRequest } from "./cmd-edit-buffer";
 import {
     bufferLinesToText,
     createTempFileFromBlob,
@@ -100,6 +101,8 @@ export class TermWrap {
     lastUpdated: number;
     promptMarkers: TermTypes.IMarker[] = [];
     shellIntegrationStatusAtom: jotai.PrimitiveAtom<ShellIntegrationStatus | null>;
+    private shellType: string | null = null;
+    private readonly cmdEditBuffer = new CmdEditBuffer();
     lastCommandAtom: jotai.PrimitiveAtom<string | null>;
     claudeCodeActiveAtom: jotai.PrimitiveAtom<boolean>;
     nodeModel: BlockNodeModel; // this can be null
@@ -420,6 +423,7 @@ export class TermWrap {
 
             if (rtInfo && rtInfo["shell:integration"]) {
                 shellState = rtInfo["shell:state"] as ShellIntegrationStatus;
+                this.setShellType(rtInfo["shell:type"]);
                 globalStore.set(this.shellIntegrationStatusAtom, shellState || null);
             } else {
                 globalStore.set(this.shellIntegrationStatusAtom, null);
@@ -468,8 +472,60 @@ export class TermWrap {
             return;
         }
 
+        this.trackCmdInput(data);
+
         this.sendDataHandler?.(data);
         this.multiInputCallback?.(data);
+    }
+
+    trackCmdInput(data: string): void {
+        if (!this.isCmdShell() || globalStore.get(this.shellIntegrationStatusAtom) !== "ready") {
+            return;
+        }
+        const inputResult = this.cmdEditBuffer.handleInput(data);
+        if (inputResult.submitted) {
+            globalStore.set(this.shellIntegrationStatusAtom, "running-command");
+            globalStore.set(this.lastCommandAtom, inputResult.command ?? null);
+        }
+    }
+
+    setShellType(shellType: string | null | undefined): void {
+        this.shellType = shellType?.toLowerCase() ?? null;
+    }
+
+    getShellType(): string | null {
+        return this.shellType;
+    }
+
+    isCmdShell(): boolean {
+        return this.shellType === "cmd" || this.shellType === "cmd.exe";
+    }
+
+    beginShellPrompt(): void {
+        if (this.isCmdShell()) {
+            this.cmdEditBuffer.beginPrompt();
+        }
+    }
+
+    canEnhanceCmdLine(): boolean {
+        return this.cmdEditBuffer.snapshot()?.text.trim().length > 0;
+    }
+
+    invalidateCmdLine(): void {
+        if (this.isCmdShell()) {
+            this.cmdEditBuffer.invalidateCurrentPrompt();
+        }
+    }
+
+    hasTerminalFocus(): boolean {
+        return this.terminal.textarea === document.activeElement;
+    }
+
+    enhanceCmdLine(
+        cwd: string,
+        suggest: (request: CmdSuggestionRequest) => Promise<string>
+    ): Promise<string | null> {
+        return this.cmdEditBuffer.enhance(cwd, suggest);
     }
 
     addFocusListener(focusFn: () => void) {

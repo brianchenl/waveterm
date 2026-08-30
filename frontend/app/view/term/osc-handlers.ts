@@ -14,6 +14,7 @@ import {
 } from "@/store/global";
 import { base64ToString, fireAndForget, isSshConnName, isWslConnName } from "@/util/util";
 import debug from "debug";
+import { normalizeCmdShellPath } from "./cmd-shell-path";
 import type { TermWrap } from "./termwrap";
 
 const dlog = debug("wave:termwrap");
@@ -43,6 +44,8 @@ type Osc16162Command =
       }
     | { command: "D"; data: { exitcode?: number } }
     | { command: "I"; data: { inputempty?: boolean } }
+    | { command: "P"; data: { path?: string } }
+    | { command: "S"; data: { shell?: string } }
     | { command: "R"; data: Record<string, never> };
 
 function normalizeCmd(decodedCmd: string): string {
@@ -294,7 +297,11 @@ export function handleOsc16162Command(data: string, blockId: string, loaded: boo
     const commandStr = parts[0];
     const jsonDataStr = parts.length > 1 ? parts.slice(1).join(";") : null;
     let parsedData: Record<string, any> = {};
-    if (jsonDataStr) {
+    if (commandStr === "P") {
+        parsedData = { path: jsonDataStr ?? "" };
+    } else if (commandStr === "S") {
+        parsedData = { shell: jsonDataStr ?? "" };
+    } else if (jsonDataStr) {
         try {
             parsedData = JSON.parse(jsonDataStr);
         } catch (e) {
@@ -307,6 +314,7 @@ export function handleOsc16162Command(data: string, blockId: string, loaded: boo
     switch (cmd.command) {
         case "A": {
             rtInfo["shell:state"] = "ready";
+            termWrap.beginShellPrompt();
             globalStore.set(termWrap.shellIntegrationStatusAtom, "ready");
             globalStore.set(termWrap.claudeCodeActiveAtom, false);
             const marker = terminal.registerMarker(0);
@@ -328,6 +336,7 @@ export function handleOsc16162Command(data: string, blockId: string, loaded: boo
         case "M":
             if (cmd.data.shell) {
                 rtInfo["shell:type"] = cmd.data.shell;
+                termWrap.setShellType(cmd.data.shell);
             }
             if (cmd.data.shellversion) {
                 rtInfo["shell:version"] = cmd.data.shellversion;
@@ -345,6 +354,32 @@ export function handleOsc16162Command(data: string, blockId: string, loaded: boo
                 rtInfo["shell:comp"] = cmd.data.comp;
             }
             break;
+        case "S":
+            if (cmd.data.shell !== "cmd") {
+                console.log("Invalid shell marker received");
+                break;
+            }
+            rtInfo["shell:type"] = "cmd";
+            rtInfo["shell:integration"] = true;
+            termWrap.setShellType("cmd");
+            break;
+        case "P": {
+            const cmdCwd = normalizeCmdShellPath(cmd.data.path ?? "");
+            if (cmdCwd == null) {
+                console.log("Invalid CMD cwd marker received");
+                break;
+            }
+            rtInfo["shell:hascurcwd"] = true;
+            setTimeout(() => {
+                fireAndForget(async () => {
+                    await RpcApi.SetMetaCommand(TabRpcClient, {
+                        oref: WOS.makeORef("block", blockId),
+                        meta: { "cmd:cwd": cmdCwd },
+                    }).catch((e) => console.log("error setting CMD cwd", e));
+                });
+            }, 0);
+            break;
+        }
         case "D":
             globalStore.set(termWrap.claudeCodeActiveAtom, false);
             if (cmd.data.exitcode != null) {

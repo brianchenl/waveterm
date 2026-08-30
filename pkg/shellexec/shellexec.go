@@ -575,6 +575,44 @@ func StartRemoteShellJob(ctx context.Context, logCtx context.Context, termSize w
 	return jobId, nil
 }
 
+func makeLocalInteractiveShellArgs(shellType string, shellOpts []string, cmdOpts CommandOptsType) []string {
+	args := append([]string{}, shellOpts...)
+	switch shellType {
+	case shellutil.ShellType_bash:
+		return append(args, "--rcfile", shellutil.GetLocalBashRcFileOverride())
+	case shellutil.ShellType_fish:
+		if cmdOpts.Login {
+			args = append(args, "-l")
+		}
+		waveFishPath := shellutil.GetLocalWaveFishFilePath()
+		return append(args, "-C", fmt.Sprintf("source %s", shellutil.HardQuoteFish(waveFishPath)))
+	case shellutil.ShellType_pwsh:
+		return append(args, "-ExecutionPolicy", "Bypass", "-NoExit", "-File", shellutil.GetLocalWavePowershellEnv())
+	case shellutil.ShellType_cmd:
+		return append(args, "/D", "/Q", "/V:OFF", "/K", `call "%WAVETERM_CMD_INIT%"`)
+	default:
+		if cmdOpts.Login {
+			args = append(args, "-l")
+		}
+		if cmdOpts.Interactive {
+			args = append(args, "-i")
+		}
+		return args
+	}
+}
+
+func makeLocalCommandArgs(shellType string, shellOpts []string, cmdStr string) []string {
+	args := append([]string{}, shellOpts...)
+	switch shellType {
+	case shellutil.ShellType_cmd:
+		return append(args, "/D", "/V:OFF", "/S", "/C", cmdStr)
+	case shellutil.ShellType_pwsh:
+		return append(args, "-Command", cmdStr)
+	default:
+		return append(args, "-c", cmdStr)
+	}
+}
+
 func StartLocalShellProc(logCtx context.Context, termSize waveobj.TermSize, cmdStr string, cmdOpts CommandOptsType, connName string) (*ShellProc, error) {
 	if cmdOpts.SwapToken == nil {
 		return nil, fmt.Errorf("SwapToken is required in CommandOptsType")
@@ -591,37 +629,20 @@ func StartLocalShellProc(logCtx context.Context, termSize waveobj.TermSize, cmdS
 	var isShell bool
 	if cmdStr == "" {
 		isShell = true
-		if shellType == shellutil.ShellType_bash {
-			// add --rcfile
-			// cant set -l or -i with --rcfile
-			shellOpts = append(shellOpts, "--rcfile", shellutil.GetLocalBashRcFileOverride())
-		} else if shellType == shellutil.ShellType_fish {
-			if cmdOpts.Login {
-				shellOpts = append(shellOpts, "-l")
-			}
-			waveFishPath := shellutil.GetLocalWaveFishFilePath()
-			carg := fmt.Sprintf("source %s", shellutil.HardQuoteFish(waveFishPath))
-			shellOpts = append(shellOpts, "-C", carg)
-		} else if shellType == shellutil.ShellType_pwsh {
-			shellOpts = append(shellOpts, "-ExecutionPolicy", "Bypass", "-NoExit", "-File", shellutil.GetLocalWavePowershellEnv())
-		} else {
-			if cmdOpts.Login {
-				shellOpts = append(shellOpts, "-l")
-			}
-			if cmdOpts.Interactive {
-				shellOpts = append(shellOpts, "-i")
-			}
-		}
+		shellOpts = makeLocalInteractiveShellArgs(shellType, shellOpts, cmdOpts)
 		blocklogger.Debugf(logCtx, "[conndebug] shell:%s shellOpts:%v\n", shellPath, shellOpts)
-		ecmd = exec.Command(shellPath, shellOpts...)
+		ecmd = makeLocalExecCommand(shellPath, shellType, shellOpts)
 		ecmd.Env = os.Environ()
+		if shellType == shellutil.ShellType_cmd {
+			shellutil.UpdateCmdEnv(ecmd, map[string]string{"WAVETERM_CMD_INIT": shellutil.GetLocalWaveCmdEnv()})
+		}
 		if shellType == shellutil.ShellType_zsh {
 			shellutil.UpdateCmdEnv(ecmd, map[string]string{"ZDOTDIR": shellutil.GetLocalZshZDotDir()})
 		}
 	} else {
 		isShell = false
-		shellOpts = append(shellOpts, "-c", cmdStr)
-		ecmd = exec.Command(shellPath, shellOpts...)
+		shellOpts = makeLocalCommandArgs(shellType, shellOpts, cmdStr)
+		ecmd = makeLocalExecCommand(shellPath, shellType, shellOpts)
 		ecmd.Env = os.Environ()
 	}
 

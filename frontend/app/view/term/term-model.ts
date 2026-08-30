@@ -82,6 +82,7 @@ export class TermViewModel implements ViewModel {
     termDurableStatus: jotai.Atom<BlockJobStatusData | null>;
     termConfigedDurable: jotai.Atom<null | boolean>;
     searchAtoms?: SearchAtoms;
+    private cmdAIEnhancementPending = false;
 
     constructor({ blockId, nodeModel, tabModel }: ViewModelInitType) {
         this.viewType = "term";
@@ -447,9 +448,39 @@ export class TermViewModel implements ViewModel {
         if (
             termWrap?.shellIntegrationStatusAtom == null ||
             getFn(termWrap.shellIntegrationStatusAtom) !== "ready" ||
-            termWrap.terminal?.buffer?.active?.type !== "normal"
+            termWrap.terminal?.buffer?.active?.type !== "normal" ||
+            !termWrap.hasTerminalFocus()
         ) {
             return false;
+        }
+        if (termWrap.isCmdShell()) {
+            if (this.cmdAIEnhancementPending || !termWrap.canEnhanceCmdLine()) {
+                return false;
+            }
+            const cwd = getFn(this.blockAtom)?.meta?.["cmd:cwd"] ?? "";
+            this.cmdAIEnhancementPending = true;
+            void termWrap
+                .enhanceCmdLine(cwd, (request) =>
+                    RpcApi.TerminalCommandSuggestCommand(TabRpcClient, request, { timeout: 120000 })
+                )
+                .then((editSequence) => {
+                    if (
+                        editSequence != null &&
+                        this.termRef.current === termWrap &&
+                        getFn(termWrap.shellIntegrationStatusAtom) === "ready" &&
+                        termWrap.terminal?.buffer?.active?.type === "normal"
+                    ) {
+                        return this.sendDataToController(editSequence).catch((error) => {
+                            termWrap.invalidateCmdLine();
+                            throw error;
+                        });
+                    }
+                })
+                .catch((error) => console.error("Failed to enhance CMD input:", error))
+                .finally(() => {
+                    this.cmdAIEnhancementPending = false;
+                });
+            return true;
         }
         void this.sendDataToController("\x1b[24;2~");
         return true;
@@ -459,7 +490,7 @@ export class TermViewModel implements ViewModel {
         const tvms = getAllBasicTermModels();
         for (const tvm of tvms) {
             if (tvm != this) {
-                tvm.sendDataToController(data);
+                tvm.sendUserDataToController(data);
             }
         }
     }
@@ -467,6 +498,11 @@ export class TermViewModel implements ViewModel {
     sendDataToController(data: string): Promise<void> {
         const b64data = stringToBase64(data);
         return RpcApi.ControllerInputCommand(TabRpcClient, { blockid: this.blockId, inputdata64: b64data });
+    }
+
+    sendUserDataToController(data: string): Promise<void> {
+        this.termRef.current?.trackCmdInput(data);
+        return this.sendDataToController(data);
     }
 
     setTermMode(mode: "term" | "vdom") {
@@ -668,13 +704,13 @@ export class TermViewModel implements ViewModel {
 
         if (isMacOS()) {
             if (keyutil.checkKeyPressed(waveEvent, "Cmd:ArrowLeft")) {
-                this.sendDataToController("\x01"); // Ctrl-A (beginning of line)
+                this.sendUserDataToController("\x01"); // Ctrl-A (beginning of line)
                 event.preventDefault();
                 event.stopPropagation();
                 return false;
             }
             if (keyutil.checkKeyPressed(waveEvent, "Cmd:ArrowRight")) {
-                this.sendDataToController("\x05"); // Ctrl-E (end of line)
+                this.sendUserDataToController("\x05"); // Ctrl-E (end of line)
                 event.preventDefault();
                 event.stopPropagation();
                 return false;
@@ -684,7 +720,7 @@ export class TermViewModel implements ViewModel {
             const shiftEnterNewlineAtom = getOverrideConfigAtom(this.blockId, "term:shiftenternewline");
             const shiftEnterNewlineEnabled = globalStore.get(shiftEnterNewlineAtom) ?? true;
             if (shiftEnterNewlineEnabled) {
-                this.sendDataToController("\n");
+                this.sendUserDataToController("\n");
                 event.preventDefault();
                 event.stopPropagation();
                 return false;
