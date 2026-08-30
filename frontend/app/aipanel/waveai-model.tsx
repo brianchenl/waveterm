@@ -10,7 +10,6 @@ import { isBuilderWindow } from "@/app/store/windowtype";
 import * as WOS from "@/app/store/wos";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { openFocusedTerminalAI } from "@/app/view/term/inlineai/terminal-ai-registry";
 import { BuilderFocusManager } from "@/builder/store/builder-focusmanager";
 import { getWebServerEndpoint } from "@/util/endpoints";
 import { base64ToArrayBuffer } from "@/util/util";
@@ -312,7 +311,6 @@ export class WaveAIModel {
 
     focusInput() {
         if (!this.inBuilder) {
-            void openFocusedTerminalAI().catch((error) => console.error("Failed to open terminal AI:", error));
             return;
         }
         if (this.inputRef?.current) {

@@ -17,12 +17,14 @@ vi.mock("@/app/i18n/current-i18n", () => ({
 import { WaveAIPage } from "./onboarding-features";
 
 describe("Wave AI onboarding", () => {
-    it("introduces terminal AI mode instead of the retired global AI panel", () => {
+    it("explains in-place command-line enhancement without automatic execution", () => {
         const markup = renderToStaticMarkup(<WaveAIPage onNext={vi.fn()} onSkip={vi.fn()} />);
 
-        expect(markup).toContain("AI mode inside your terminal");
-        expect(markup).toContain("current terminal output");
-        expect(markup).not.toContain("Wave AI panel");
-        expect(markup).not.toContain("AI button in the header (top left)");
+        expect(markup).toContain(
+            "Type your intent at the command line, then press the shortcut to enhance it in place."
+        );
+        expect(markup).toContain("Nothing runs automatically.");
+        expect(markup).not.toContain("AI mode");
+        expect(markup).not.toContain("AI button");
     });
 });

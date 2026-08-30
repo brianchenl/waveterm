@@ -44,42 +44,42 @@ export const WaveAIPage = ({ onNext, onSkip }: { onNext: () => void; onSkip: () 
                 <div>
                     <Logo />
                 </div>
-                <div className="text-[25px] font-normal text-foreground">{t("Terminal AI")}</div>
+                <div className="text-[25px] font-normal text-foreground">{t("Command-line enhancement")}</div>
             </header>
             <div className="flex-1 flex flex-row gap-0 min-h-0">
                 <div className="flex-1 flex flex-col items-center justify-center gap-8 pr-6 unselectable">
                     <div className="flex flex-col items-start gap-6 max-w-md">
                         <div className="flex h-[52px] px-3 items-center rounded-lg bg-hover text-accent text-[24px]">
-                            <i className="fa fa-sparkles" />
-                            <span className="font-bold ml-2 font-mono">AI</span>
+                            <i className="fa fa-wand-magic-sparkles" />
+                            <span className="font-bold ml-2 font-mono">{shortcutKey}</span>
                         </div>
 
                         <div className="flex flex-col items-start gap-4 text-secondary">
                             <p>
                                 {t(
-                                    "Open AI mode inside your terminal to ask about the current terminal output without leaving your workflow."
+                                    "Type your intent at the command line, then press the shortcut to enhance it in place. Nothing runs automatically."
                                 )}
                             </p>
 
                             <div className="flex items-start gap-3 w-full">
-                                <i className="fa fa-sparkles text-accent text-lg mt-1 flex-shrink-0" />
-                                <p>{t("Focus a terminal, then use the AI button to open its embedded AI mode.")}</p>
+                                <i className="fa fa-terminal text-accent text-lg mt-1 flex-shrink-0" />
+                                <p>{t("Enter a plain-language intent in a focused terminal.")}</p>
                             </div>
 
                             <div className="flex items-start gap-3 w-full">
                                 <i className="fa fa-keyboard text-accent text-lg mt-1 flex-shrink-0" />
                                 <p>
-                                    {t("Press {{shortcut}} to toggle AI mode for the focused terminal.", {
+                                    {t("Press {{shortcut}} to enhance the current command line in place.", {
                                         shortcut: shortcutKey,
                                     })}
                                 </p>
                             </div>
 
                             <div className="flex items-start gap-3 w-full">
-                                <i className="fa fa-terminal text-accent text-lg mt-1 flex-shrink-0" />
+                                <i className="fa fa-shield-check text-accent text-lg mt-1 flex-shrink-0" />
                                 <p>
                                     {t(
-                                        "Review the response, control terminal context, and fill a suggested command back into the prompt."
+                                        "Nothing runs automatically. Review the enhanced command, then execute it yourself."
                                     )}
                                 </p>
                             </div>
@@ -102,27 +102,19 @@ export const WaveAIPage = ({ onNext, onSkip }: { onNext: () => void; onSkip: () 
                     <div className="flex h-[400px] w-full flex-col overflow-hidden rounded border border-border/50 bg-black font-mono text-[12px]">
                         <div className="border-b border-border/50 px-3 py-2 text-secondary">~/wave-project</div>
                         <div className="flex-1 space-y-2 px-3 py-3 text-foreground">
+                            <div className="text-secondary">{t("Intent")}</div>
                             <div>
-                                <span className="text-success">$</span> npm test
+                                <span className="text-success">$</span> {t("find the largest files changed this week")}
                             </div>
-                            <div className="text-secondary">Tests: 1 failed, 42 passed</div>
-                            <div className="text-error">TypeError: Cannot read properties of undefined</div>
+                            <div className="pt-3 text-secondary">{shortcutKey}</div>
                         </div>
                         <div className="border-t border-border bg-background text-foreground">
-                            <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="h-2 w-2 rounded-full bg-accent" />
-                                    <strong>{t("AI mode")}</strong>
-                                    <span className="text-secondary">{t("Ready")}</span>
-                                </div>
-                                <span className="text-secondary">×</span>
-                            </div>
-                            <div className="border-b border-border px-3 py-2 text-secondary">
-                                {t("Terminal context on · current command and output")}
-                            </div>
                             <div className="px-3 py-3">
-                                <div className="rounded border border-border bg-hover px-3 py-2 text-secondary">
-                                    {t("Why did this test fail?")}
+                                <div className="mb-2 text-secondary">
+                                    {t("Enhanced command · review before running")}
+                                </div>
+                                <div className="rounded border border-border bg-hover px-3 py-2 text-foreground">
+                                    find . -type f -mtime -7 -print0 | xargs -0 du -h | sort -hr | head
                                 </div>
                             </div>
                         </div>

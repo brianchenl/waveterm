@@ -123,7 +123,7 @@ type OpenAIRequest struct {
 	Reasoning          *ReasoningType      `json:"reasoning,omitempty"`
 	SafetyIdentifier   string              `json:"safety_identifier,omitempty"`
 	ServiceTier        string              `json:"service_tier,omitempty"` // "auto", "default", "flex", "priority"
-	Store              bool                `json:"store,omitempty"`
+	Store              *bool               `json:"store,omitempty"`
 	Stream             bool                `json:"stream,omitempty"`
 	StreamOptions      *StreamOptionsType  `json:"stream_options,omitempty"`
 	Temperature        float64             `json:"temperature,omitempty"`
@@ -244,6 +244,10 @@ func buildOpenAIHTTPRequest(ctx context.Context, inputs []any, chatOpts uctypes.
 		StreamOptions:   &StreamOptionsType{IncludeObfuscation: false},
 		MaxOutputTokens: maxTokens,
 		Text:            &TextType{Verbosity: verbosity},
+	}
+	if chatOpts.DisableProviderStore {
+		store := false
+		reqBody.Store = &store
 	}
 
 	// Add system prompt as instructions if provided

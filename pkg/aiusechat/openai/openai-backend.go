@@ -528,7 +528,7 @@ func RunOpenAIChatStep(
 		return nil, nil, nil, err
 	}
 
-	httpClient, err := aiutil.MakeHTTPClient(chatOpts.Config.ProxyURL)
+	httpClient, err := aiutil.MakeHTTPClient(chatOpts.Config.ProxyURL, chatOpts.DisableRedirects)
 	if err != nil {
 		return nil, nil, nil, err
 	}

@@ -4,7 +4,6 @@
 import { Tooltip } from "@/app/element/tooltip";
 import { useTranslation } from "@/app/i18n/use-i18n";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { terminalAIRegistry, toggleFocusedTerminalAI } from "@/app/view/term/inlineai/terminal-ai-registry";
 import { useWaveEnv } from "@/app/waveenv/waveenv";
 import { deleteLayoutModelForTab } from "@/layout/index";
 import { isMacOSTahoeOrLater } from "@/util/platformutil";
@@ -45,36 +44,6 @@ interface TabBarProps {
     workspace: Workspace;
     noTabs?: boolean;
 }
-
-const WaveAIButton = memo(({ divRef }: { divRef?: React.RefObject<HTMLDivElement> }) => {
-    const { t } = useTranslation();
-    const env = useWaveEnv<TabBarEnv>();
-    const terminalAIOpen = useAtomValue(terminalAIRegistry.anyOpenAtom);
-    const hideAiButton = useAtomValue(env.getSettingsKeyAtom("app:hideaibutton"));
-
-    const onClick = () => {
-        toggleFocusedTerminalAI();
-    };
-
-    if (hideAiButton) {
-        return null;
-    }
-
-    return (
-        <Tooltip
-            content={t("Toggle terminal AI mode")}
-            placement="bottom"
-            hideOnClick
-            divClassName={`flex h-[22px] px-3.5 justify-end mb-1 items-center rounded-md mr-1 box-border cursor-pointer bg-hover hover:bg-hoverbg transition-colors text-[12px] ${terminalAIOpen ? "text-accent" : "text-secondary"}`}
-            divStyle={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-            divOnClick={onClick}
-            divRef={divRef}
-        >
-            <i className="fa fa-sparkles" />
-        </Tooltip>
-    );
-});
-WaveAIButton.displayName = "WaveAIButton";
 
 function strArrayIsEqual(a: string[], b: string[]) {
     // null check
@@ -124,7 +93,6 @@ const TabBar = memo(({ workspace, noTabs }: TabBarProps) => {
     const draggerLeftRef = useRef<HTMLDivElement>(null);
     const rightContainerRef = useRef<HTMLDivElement>(null);
     const workspaceSwitcherRef = useRef<HTMLDivElement>(null);
-    const waveAIButtonRef = useRef<HTMLDivElement>(null);
     const appMenuButtonRef = useRef<HTMLDivElement>(null);
     const tabWidthRef = useRef<number>(TabDefaultWidth);
     const scrollableRef = useRef<boolean>(false);
@@ -134,7 +102,6 @@ const TabBar = memo(({ workspace, noTabs }: TabBarProps) => {
     const zoomFactor = useAtomValue(env.atoms.zoomFactorAtom);
     const showMenuBar = useAtomValue(env.getSettingsKeyAtom("window:showmenubar"));
     const confirmClose = useAtomValue(env.getSettingsKeyAtom("tab:confirmclose")) ?? false;
-    const hideAiButton = useAtomValue(env.getSettingsKeyAtom("app:hideaibutton"));
     const appUpdateStatus = useAtomValue(env.atoms.updaterStatusAtom);
 
     let prevDelta: number;
@@ -191,16 +158,8 @@ const TabBar = memo(({ workspace, noTabs }: TabBarProps) => {
         const addBtnWidth = getOuterWidth(addBtnRef.current);
         const appMenuButtonWidth = appMenuButtonRef.current?.getBoundingClientRect().width ?? 0;
         const workspaceSwitcherWidth = workspaceSwitcherRef.current?.getBoundingClientRect().width ?? 0;
-        const waveAIButtonWidth =
-            !hideAiButton && waveAIButtonRef.current != null ? getOuterWidth(waveAIButtonRef.current) : 0;
-
         const nonTabElementsWidth =
-            windowDragLeftWidth +
-            rightContainerWidth +
-            addBtnWidth +
-            appMenuButtonWidth +
-            workspaceSwitcherWidth +
-            waveAIButtonWidth;
+            windowDragLeftWidth + rightContainerWidth + addBtnWidth + appMenuButtonWidth + workspaceSwitcherWidth;
         const spaceForTabs = tabbarWrapperWidth - nonTabElementsWidth;
 
         const numberOfTabs = tabIds.length;
@@ -274,7 +233,7 @@ const TabBar = memo(({ workspace, noTabs }: TabBarProps) => {
         };
     }, [handleResizeTabs]);
 
-    // update layout on changed tabIds, tabsLoaded, newTabId, hideAiButton, appUpdateStatus, or zoomFactor
+    // update layout on changed tabIds, tabsLoaded, newTabId, appUpdateStatus, or zoomFactor
     useEffect(() => {
         // Check if all tabs are loaded
         const allLoaded = tabIds.length > 0 && tabIds.every((id) => tabsLoaded[id]);
@@ -285,7 +244,7 @@ const TabBar = memo(({ workspace, noTabs }: TabBarProps) => {
                 prevAllLoadedRef.current = true;
             }
         }
-    }, [tabIds, tabsLoaded, newTabId, saveTabsPosition, hideAiButton, appUpdateStatus, zoomFactor, showMenuBar]);
+    }, [tabIds, tabsLoaded, newTabId, saveTabsPosition, appUpdateStatus, zoomFactor, showMenuBar]);
 
     const getDragDirection = (currentX: number) => {
         let dragDirection: string;
@@ -604,7 +563,6 @@ const TabBar = memo(({ workspace, noTabs }: TabBarProps) => {
                     <i className="fa fa-ellipsis" />
                 </div>
             )}
-            <WaveAIButton divRef={waveAIButtonRef} />
             <Tooltip
                 content="Workspace Switcher"
                 placement="bottom"
@@ -667,4 +625,4 @@ const TabBar = memo(({ workspace, noTabs }: TabBarProps) => {
     );
 });
 
-export { TabBar, WaveAIButton };
+export { TabBar };

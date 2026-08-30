@@ -1,7 +1,6 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import ClaudeColorSvg from "@/app/asset/claude-color.svg";
 import { SubBlock } from "@/app/block/block";
 import type { BlockNodeModel } from "@/app/block/blocktypes";
 import { NullErrorBoundary } from "@/app/element/errorboundary";
@@ -21,7 +20,6 @@ import clsx from "clsx";
 import debug from "debug";
 import * as jotai from "jotai";
 import * as React from "react";
-import { TerminalAIControllerLoader } from "./inlineai/terminal-ai-controller-loader";
 import { TermLinkTooltip } from "./term-tooltip";
 import { TermStickers } from "./termsticker";
 import { TermThemeUpdater } from "./termtheme";
@@ -35,16 +33,6 @@ interface TerminalViewProps {
     blockId: string;
     model: TermViewModel;
 }
-
-const TermClaudeIcon = React.memo(() => {
-    return (
-        <div className="[&_svg]:w-[15px] [&_svg]:h-[15px]" aria-hidden="true">
-            <ClaudeColorSvg />
-        </div>
-    );
-});
-
-TermClaudeIcon.displayName = "TermClaudeIcon";
 
 const TermResyncHandler = React.memo(({ blockId, model }: TerminalViewProps) => {
     const connStatus = jotai.useAtomValue(model.connStatus);
@@ -398,9 +386,8 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
                 <TermLinkTooltip termWrap={termWrapInst} />
             </NullErrorBoundary>
             <Search {...searchProps} />
-            {isBasicTerm && <TerminalAIControllerLoader blockId={blockId} model={model} />}
         </div>
     );
 };
 
-export { TermClaudeIcon, TerminalView };
+export { TerminalView };

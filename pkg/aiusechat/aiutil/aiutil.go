@@ -187,9 +187,14 @@ func JsonEncodeRequestBody(reqBody any) (bytes.Buffer, error) {
 	return buf, nil
 }
 
-func MakeHTTPClient(proxyURL string) (*http.Client, error) {
+func MakeHTTPClient(proxyURL string, disableRedirects ...bool) (*http.Client, error) {
 	client := &http.Client{
 		Timeout: 0, // rely on ctx; streaming can be long
+	}
+	if len(disableRedirects) > 0 && disableRedirects[0] {
+		client.CheckRedirect = func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
 	}
 	if proxyURL == "" {
 		return client, nil

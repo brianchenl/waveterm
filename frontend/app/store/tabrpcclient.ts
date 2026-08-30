@@ -1,18 +1,9 @@
 // Copyright 2025, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import {
-    getApi,
-    getBlockComponentModel,
-    getConnStatusAtom,
-    getFocusedBlockId,
-    globalStore,
-    WOS,
-} from "@/app/store/global";
-import { terminalAIRegistry } from "@/app/view/term/inlineai/terminal-ai-registry";
+import { getApi, getBlockComponentModel, getConnStatusAtom, globalStore, WOS } from "@/app/store/global";
 import type { TermViewModel } from "@/app/view/term/term-model";
 import { getLayoutModelForStaticTab } from "@/layout/index";
-import { base64ToArrayBuffer } from "@/util/util";
 import { RpcResponseHelper, WshClient } from "./wshclient";
 import { RpcApi } from "./wshclientapi";
 
@@ -66,29 +57,6 @@ export class TabClient extends WshClient {
         }
 
         return await getApi().captureScreenshot(electronRect);
-    }
-
-    async handle_waveaiaddcontext(rh: RpcResponseHelper, data: CommandWaveAIAddContextData): Promise<void> {
-        const files: File[] = [];
-        if (data.files && data.files.length > 0) {
-            for (const fileData of data.files) {
-                const decodedData = base64ToArrayBuffer(fileData.data64);
-                const blob = new Blob([decodedData], { type: fileData.type });
-                files.push(new File([blob], fileData.name, { type: fileData.type }));
-            }
-        }
-        const blockId = getFocusedBlockId();
-        if (
-            !blockId ||
-            !(await terminalAIRegistry.open(blockId, {
-                newChat: data.newchat,
-                text: data.text,
-                submit: data.submit,
-                files,
-            }))
-        ) {
-            throw new Error("No focused terminal is available for AI context");
-        }
     }
 
     async handle_setblockfocus(rh: RpcResponseHelper, blockId: string): Promise<void> {

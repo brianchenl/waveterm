@@ -18,7 +18,7 @@ function clampVTabWidth(width: number): number {
     return Math.max(VTabBarMinWidth, Math.min(width, VTabBarMaxWidth));
 }
 
-/** Owns only the persistent vertical-tab width. Terminal AI layout is block-local. */
+/** Owns only the persistent vertical-tab width. */
 class WorkspaceLayoutModel {
     private static instance: WorkspaceLayoutModel | null = null;
     private panelGroupRef: ImperativePanelGroupHandle | null = null;

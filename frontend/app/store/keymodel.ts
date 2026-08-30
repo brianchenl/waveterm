@@ -19,10 +19,10 @@ import {
     WOS,
 } from "@/app/store/global";
 import { getActiveTabModel } from "@/app/store/tab-model";
-import { toggleFocusedTerminalAI } from "@/app/view/term/inlineai/terminal-ai-registry";
+import type { TermViewModel } from "@/app/view/term/term-model";
 import { deleteLayoutModelForTab, getLayoutModelForStaticTab, NavigateDirection } from "@/layout/index";
 import * as keyutil from "@/util/keyutil";
-import { isWindows } from "@/util/platformutil";
+import { isMacOS } from "@/util/platformutil";
 import { CHORD_TIMEOUT } from "@/util/sharedconst";
 import { fireAndForget } from "@/util/util";
 import * as jotai from "jotai";
@@ -67,6 +67,14 @@ function getFocusedBlockInStaticTab(): string {
     const layoutModel = getLayoutModelForStaticTab();
     const focusedNode = globalStore.get(layoutModel.focusedNode);
     return focusedNode.data?.blockId;
+}
+
+function sendTerminalEnhancementShortcut() {
+    const bcm = getBlockComponentModel(getFocusedBlockId());
+    if (bcm?.viewModel?.viewType != "term") {
+        return;
+    }
+    (bcm.viewModel as TermViewModel).enhanceCurrentCommand((atom) => globalStore.get(atom));
 }
 
 function getSimpleControlShiftAtom() {
@@ -600,25 +608,6 @@ function registerGlobalKeys() {
             return true;
         });
     }
-    if (isWindows()) {
-        globalKeyMap.set("Alt:c{Digit0}", () => {
-            toggleFocusedTerminalAI();
-            return true;
-        });
-        globalKeyMap.set("Alt:c{Numpad0}", () => {
-            toggleFocusedTerminalAI();
-            return true;
-        });
-    } else {
-        globalKeyMap.set("Ctrl:Shift:c{Digit0}", () => {
-            toggleFocusedTerminalAI();
-            return true;
-        });
-        globalKeyMap.set("Ctrl:Shift:c{Numpad0}", () => {
-            toggleFocusedTerminalAI();
-            return true;
-        });
-    }
     function activateSearch(event: WaveKeyboardEvent): boolean {
         const bcm = getBlockComponentModel(getFocusedBlockInStaticTab());
         // Ctrl+f is reserved in most shells
@@ -658,10 +647,11 @@ function registerGlobalKeys() {
         }
         return false;
     });
-    globalKeyMap.set("Cmd:Shift:a", () => {
-        toggleFocusedTerminalAI();
+    const enhanceCurrentCommand = () => {
+        sendTerminalEnhancementShortcut();
         return true;
-    });
+    };
+    globalKeyMap.set(isMacOS() ? "Cmd:Shift:a" : "Ctrl:Shift:a", enhanceCurrentCommand);
     const allKeys = Array.from(globalKeyMap.keys());
     // special case keys, handled by web view
     allKeys.push("Cmd:l", "Cmd:r", "Cmd:ArrowRight", "Cmd:ArrowLeft", "Cmd:o");

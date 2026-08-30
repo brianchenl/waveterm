@@ -1,69 +1,71 @@
-// Copyright 2025, Command Line Inc.
+// Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 package cmd
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/wavetermdev/waveterm/pkg/util/fileutil"
+	"github.com/wavetermdev/waveterm/pkg/util/shellutil"
 	"github.com/wavetermdev/waveterm/pkg/util/utilfn"
 	"github.com/wavetermdev/waveterm/pkg/wshrpc"
-	"github.com/wavetermdev/waveterm/pkg/wshrpc/wshclient"
 	"github.com/wavetermdev/waveterm/pkg/wshutil"
 )
 
+const terminalCommandSuggestRPCTimeout = 120000
+
+var aiStdinFlag bool
+var aiShellFlag string
+
 var aiCmd = &cobra.Command{
-	Use:   "ai [options] [files...]",
-	Short: "Append content to Wave AI sidebar prompt",
-	Long: `Append content to Wave AI sidebar prompt (does not auto-submit by default)
+	Use:   "ai --stdin",
+	Short: "Suggest an enhanced terminal command from stdin",
+	Long: `Suggest a terminal command without executing it.
 
-Arguments:
-  files...               Files to attach (use '-' for stdin)
-
-Examples:
-  git diff | wsh ai -                    # Pipe diff to AI, ask question in UI
-  wsh ai main.go                         # Attach file, ask question in UI
-  wsh ai *.go -m "find bugs"             # Attach files with message
-  wsh ai -s - -m "review" < log.txt      # Stdin + message, auto-submit
-  wsh ai -n config.json                  # New chat with file attached`,
+Input is read only from stdin. Piped stdin is detected automatically; --stdin
+can be used to state the stdin contract explicitly. The suggestion is printed
+as a single line on stdout.`,
+	Args:                  cobra.NoArgs,
 	RunE:                  aiRun,
 	PreRunE:               preRunSetupRpcClient,
 	DisableFlagsInUseLine: true,
 }
 
-var aiMessageFlag string
-var aiSubmitFlag bool
-var aiNewBlockFlag bool
-
 func init() {
 	rootCmd.AddCommand(aiCmd)
-	aiCmd.Flags().StringVarP(&aiMessageFlag, "message", "m", "", "optional message/question to append after files")
-	aiCmd.Flags().BoolVarP(&aiSubmitFlag, "submit", "s", false, "submit the prompt immediately after appending")
-	aiCmd.Flags().BoolVarP(&aiNewBlockFlag, "new", "n", false, "create a new AI chat instead of using existing")
+	aiCmd.Flags().BoolVar(&aiStdinFlag, "stdin", false, "read the command to enhance from stdin")
+	aiCmd.Flags().StringVar(&aiShellFlag, "shell", "", "shell syntax for the suggestion (defaults to $SHELL)")
 }
 
-func detectMimeType(data []byte) string {
-	mimeType := http.DetectContentType(data)
-	return strings.Split(mimeType, ";")[0]
+func resolveAIShell(explicitShell string, environmentShell string) string {
+	if shell := strings.TrimSpace(explicitShell); shell != "" {
+		return shell
+	}
+	return strings.TrimSpace(environmentShell)
 }
 
-func getMaxFileSize(mimeType string) (int, string) {
-	if mimeType == "application/pdf" {
-		return 5 * 1024 * 1024, "5MB"
+func readAICommandInput(stdin io.Reader, stdinAvailable bool, stdinRequested bool) (string, error) {
+	if !stdinAvailable && !stdinRequested {
+		return "", fmt.Errorf("no stdin input; pipe a command or use --stdin")
 	}
-	if strings.HasPrefix(mimeType, "image/") {
-		return 7 * 1024 * 1024, "7MB"
+	data, err := io.ReadAll(stdin)
+	if err != nil {
+		return "", fmt.Errorf("reading command from stdin: %w", err)
 	}
-	return 200 * 1024, "200KB"
+	command := strings.TrimSpace(string(data))
+	if command == "" {
+		return "", fmt.Errorf("stdin command input is empty")
+	}
+	return command, nil
+}
+
+func isAIStdinAvailable() bool {
+	info, err := os.Stdin.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice == 0
 }
 
 func aiRun(cmd *cobra.Command, args []string) (rtnErr error) {
@@ -71,141 +73,37 @@ func aiRun(cmd *cobra.Command, args []string) (rtnErr error) {
 		sendActivity("ai", rtnErr == nil)
 	}()
 
-	if len(args) == 0 && aiMessageFlag == "" {
-		OutputHelpMessage(cmd)
-		return fmt.Errorf("no files or message provided")
+	command, err := readAICommandInput(os.Stdin, isAIStdinAvailable(), aiStdinFlag)
+	if err != nil {
+		return err
 	}
-
-	const maxFileCount = 15
-	const rpcTimeout = 30000
-
-	var allFiles []wshrpc.AIAttachedFile
-	var stdinUsed bool
-
-	if len(args) > maxFileCount {
-		return fmt.Errorf("too many files (maximum %d files allowed)", maxFileCount)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getting current working directory: %w", err)
 	}
-
-	for _, filePath := range args {
-		var data []byte
-		var fileName string
-		var mimeType string
-		var err error
-
-		if filePath == "-" {
-			if stdinUsed {
-				return fmt.Errorf("stdin (-) can only be used once")
-			}
-			stdinUsed = true
-
-			data, err = io.ReadAll(os.Stdin)
-			if err != nil {
-				return fmt.Errorf("reading from stdin: %w", err)
-			}
-			fileName = "stdin"
-			mimeType = "text/plain"
-		} else {
-			fileInfo, err := os.Stat(filePath)
-			if err != nil {
-				return fmt.Errorf("accessing file %s: %w", filePath, err)
-			}
-			absPath, err := filepath.Abs(filePath)
-			if err != nil {
-				return fmt.Errorf("getting absolute path for %s: %w", filePath, err)
-			}
-
-			if fileInfo.IsDir() {
-				result, err := fileutil.ReadDir(filePath, 500)
-				if err != nil {
-					return fmt.Errorf("reading directory %s: %w", filePath, err)
-				}
-				jsonData, err := json.Marshal(result)
-				if err != nil {
-					return fmt.Errorf("marshaling directory listing for %s: %w", filePath, err)
-				}
-				data = jsonData
-				fileName = absPath
-				mimeType = "directory"
-			} else {
-				data, err = os.ReadFile(filePath)
-				if err != nil {
-					return fmt.Errorf("reading file %s: %w", filePath, err)
-				}
-				fileName = absPath
-				mimeType = detectMimeType(data)
-			}
-		}
-
-		isPDF := mimeType == "application/pdf"
-		isImage := strings.HasPrefix(mimeType, "image/")
-		isDirectory := mimeType == "directory"
-
-		if !isPDF && !isImage && !isDirectory {
-			mimeType = "text/plain"
-			if utilfn.ContainsBinaryData(data) {
-				return fmt.Errorf("file %s contains binary data and cannot be uploaded as text", fileName)
-			}
-		}
-
-		maxSize, sizeStr := getMaxFileSize(mimeType)
-		if len(data) > maxSize {
-			return fmt.Errorf("file %s exceeds maximum size of %s for %s files", fileName, sizeStr, mimeType)
-		}
-
-		allFiles = append(allFiles, wshrpc.AIAttachedFile{
-			Name:   fileName,
-			Type:   mimeType,
-			Size:   len(data),
-			Data64: base64.StdEncoding.EncodeToString(data),
-		})
+	request := wshrpc.CommandTerminalCommandSuggestData{
+		Command: command,
+		Cwd:     cwd,
+		Shell:   resolveAIShell(aiShellFlag, os.Getenv("SHELL")),
 	}
-
-	tabId := os.Getenv("WAVETERM_TABID")
-	if tabId == "" {
-		return fmt.Errorf("WAVETERM_TABID environment variable not set")
+	response, err := RpcClient.SendRpcRequest("terminalcommandsuggest", request, &wshrpc.RpcOpts{
+		Route:   wshutil.DefaultRoute,
+		Timeout: terminalCommandSuggestRPCTimeout,
+	})
+	if err != nil {
+		return fmt.Errorf("requesting terminal command suggestion: %w", err)
 	}
-
-	route := wshutil.MakeTabRouteId(tabId)
-
-	if aiNewBlockFlag {
-		newChatData := wshrpc.CommandWaveAIAddContextData{
-			NewChat: true,
-		}
-		err := wshclient.WaveAIAddContextCommand(RpcClient, newChatData, &wshrpc.RpcOpts{
-			Route:   route,
-			Timeout: rpcTimeout,
-		})
-		if err != nil {
-			return fmt.Errorf("creating new chat: %w", err)
-		}
+	var suggestion string
+	if err := utilfn.ReUnmarshal(&suggestion, response); err != nil {
+		return fmt.Errorf("decoding terminal command suggestion: %w", err)
 	}
-
-	for _, file := range allFiles {
-		contextData := wshrpc.CommandWaveAIAddContextData{
-			Files: []wshrpc.AIAttachedFile{file},
-		}
-		err := wshclient.WaveAIAddContextCommand(RpcClient, contextData, &wshrpc.RpcOpts{
-			Route:   route,
-			Timeout: rpcTimeout,
-		})
-		if err != nil {
-			return fmt.Errorf("adding file %s: %w", file.Name, err)
-		}
+	if suggestion == "" {
+		return fmt.Errorf("terminal command suggestion is empty")
 	}
-
-	if aiMessageFlag != "" || aiSubmitFlag {
-		finalContextData := wshrpc.CommandWaveAIAddContextData{
-			Text:   aiMessageFlag,
-			Submit: aiSubmitFlag,
-		}
-		err := wshclient.WaveAIAddContextCommand(RpcClient, finalContextData, &wshrpc.RpcOpts{
-			Route:   route,
-			Timeout: rpcTimeout,
-		})
-		if err != nil {
-			return fmt.Errorf("adding context: %w", err)
-		}
+	suggestion, err = shellutil.ValidateTerminalCommandSuggestion(suggestion)
+	if err != nil {
+		return fmt.Errorf("validating terminal command suggestion: %w", err)
 	}
-
+	WriteStdout("%s\n", suggestion)
 	return nil
 }

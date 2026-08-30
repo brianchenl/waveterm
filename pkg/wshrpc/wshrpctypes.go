@@ -160,8 +160,8 @@ type WshRpcInterface interface {
 	GetWaveAIChatCommand(ctx context.Context, data CommandGetWaveAIChatData) (*uctypes.UIChat, error)
 	GetWaveAIRateLimitCommand(ctx context.Context) (*uctypes.RateLimitInfo, error)
 	WaveAIToolApproveCommand(ctx context.Context, data CommandWaveAIToolApproveData) error
-	WaveAIAddContextCommand(ctx context.Context, data CommandWaveAIAddContextData) error
 	WaveAIGetToolDiffCommand(ctx context.Context, data CommandWaveAIGetToolDiffData) (*CommandWaveAIGetToolDiffRtnData, error)
+	TerminalCommandSuggestCommand(ctx context.Context, data CommandTerminalCommandSuggestData) (string, error)
 
 	// screenshot
 	CaptureBlockScreenshotCommand(ctx context.Context, data CommandCaptureBlockScreenshotData) (string, error)
@@ -565,18 +565,10 @@ type CommandWaveAIToolApproveData struct {
 	Approval   string `json:"approval,omitempty"`
 }
 
-type AIAttachedFile struct {
-	Name   string `json:"name"`
-	Type   string `json:"type"`
-	Size   int    `json:"size"`
-	Data64 string `json:"data64"`
-}
-
-type CommandWaveAIAddContextData struct {
-	Files   []AIAttachedFile `json:"files,omitempty"`
-	Text    string           `json:"text,omitempty"`
-	Submit  bool             `json:"submit,omitempty"`
-	NewChat bool             `json:"newchat,omitempty"`
+type CommandTerminalCommandSuggestData struct {
+	Command string `json:"command"`
+	Cwd     string `json:"cwd"`
+	Shell   string `json:"shell"`
 }
 
 type CommandWaveAIGetToolDiffData struct {

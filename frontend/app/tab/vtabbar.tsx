@@ -7,7 +7,6 @@ import { getTabBadgeAtom } from "@/app/store/badge";
 import { getTabModelByTabId } from "@/app/store/tab-model";
 import { makeORef } from "@/app/store/wos";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { terminalAIRegistry, toggleFocusedTerminalAI } from "@/app/view/term/inlineai/terminal-ai-registry";
 import { useWaveEnv } from "@/app/waveenv/waveenv";
 import { validateCssColor } from "@/util/color-validator";
 import { cn, fireAndForget } from "@/util/util";
@@ -19,35 +18,6 @@ import { VTab, VTabItem } from "./vtab";
 import { VTabBarEnv } from "./vtabbarenv";
 import { WorkspaceSwitcher } from "./workspaceswitcher";
 export type { VTabItem } from "./vtab";
-
-const VTabBarAIButton = memo(() => {
-    const { t } = useTranslation();
-    const env = useWaveEnv<VTabBarEnv>();
-    const terminalAIOpen = useAtomValue(terminalAIRegistry.anyOpenAtom);
-    const hideAiButton = useAtomValue(env.getSettingsKeyAtom("app:hideaibutton"));
-
-    const onClick = () => {
-        toggleFocusedTerminalAI();
-    };
-
-    if (hideAiButton) {
-        return null;
-    }
-
-    return (
-        <Tooltip
-            content={t("Toggle terminal AI mode")}
-            placement="bottom"
-            hideOnClick
-            divClassName={`flex h-[22px] px-3.5 justify-end mb-1 items-center rounded-md mr-1 box-border cursor-pointer bg-hover hover:bg-hoverbg transition-colors text-[12px] ${terminalAIOpen ? "text-accent" : "text-secondary"}`}
-            divStyle={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-            divOnClick={onClick}
-        >
-            <i className="fa fa-sparkles" />
-        </Tooltip>
-    );
-});
-VTabBarAIButton.displayName = "VTabBarAIButton";
 
 const MacOSHeader = memo(() => {
     const { t } = useTranslation();
@@ -70,7 +40,6 @@ const MacOSHeader = memo(() => {
                 className="flex shrink-0 flex-row flex-wrap items-end px-1 pb-1 pl-2"
                 style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
             >
-                <VTabBarAIButton />
                 <Tooltip
                     content={t("Workspace Switcher")}
                     placement="bottom"

@@ -930,6 +930,12 @@ func TermGetScrollbackLinesCommand(w *wshutil.WshRpc, data wshrpc.CommandTermGet
 	return resp, err
 }
 
+// command "terminalcommandsuggest", wshserver.TerminalCommandSuggestCommand
+func TerminalCommandSuggestCommand(w *wshutil.WshRpc, data wshrpc.CommandTerminalCommandSuggestData, opts *wshrpc.RpcOpts) (string, error) {
+	resp, err := sendRpcRequestCallHelper[string](w, "terminalcommandsuggest", data, opts)
+	return resp, err
+}
+
 // command "test", wshserver.TestCommand
 func TestCommand(w *wshutil.WshRpc, data string, opts *wshrpc.RpcOpts) error {
 	_, err := sendRpcRequestCallHelper[any](w, "test", data, opts)
@@ -980,12 +986,6 @@ func VDomUrlRequestCommand(w *wshutil.WshRpc, data wshrpc.VDomUrlRequestData, op
 func WaitForRouteCommand(w *wshutil.WshRpc, data wshrpc.CommandWaitForRouteData, opts *wshrpc.RpcOpts) (bool, error) {
 	resp, err := sendRpcRequestCallHelper[bool](w, "waitforroute", data, opts)
 	return resp, err
-}
-
-// command "waveaiaddcontext", wshserver.WaveAIAddContextCommand
-func WaveAIAddContextCommand(w *wshutil.WshRpc, data wshrpc.CommandWaveAIAddContextData, opts *wshrpc.RpcOpts) error {
-	_, err := sendRpcRequestCallHelper[any](w, "waveaiaddcontext", data, opts)
-	return err
 }
 
 // command "waveaienabletelemetry", wshserver.WaveAIEnableTelemetryCommand
@@ -1083,5 +1083,3 @@ func WslStatusCommand(w *wshutil.WshRpc, opts *wshrpc.RpcOpts) ([]wshrpc.ConnSta
 	resp, err := sendRpcRequestCallHelper[[]wshrpc.ConnStatus](w, "wslstatus", nil, opts)
 	return resp, err
 }
-
-

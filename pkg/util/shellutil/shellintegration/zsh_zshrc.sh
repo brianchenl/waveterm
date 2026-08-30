@@ -136,6 +136,21 @@ if (( $+functions[add-zle-hook-widget] )); then
   add-zle-hook-widget zle-line-pre-redraw _waveterm_si_inputempty
 fi
 
+_waveterm_ai() {
+  local buffer="$BUFFER"
+  [[ -z "$buffer" ]] && return
+
+  local replacement
+  replacement=$(printf '%s' "$buffer" | wsh ai --stdin --shell zsh) || {
+    zle redisplay
+    return 1
+  }
+  BUFFER="$replacement"
+  CURSOR=${#BUFFER}
+}
+zle -N _waveterm_ai
+bindkey $'\e[24;2~' _waveterm_ai
+
 autoload -U add-zsh-hook
 add-zsh-hook precmd  _waveterm_si_precmd
 add-zsh-hook preexec _waveterm_si_preexec

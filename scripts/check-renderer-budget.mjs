@@ -16,7 +16,6 @@ const requiredLazyChunkPrefixes = [
   "preview-",
   "processviewer-view-",
   "sysinfo-view-",
-  "terminal-ai-controller-",
   "waveconfig-",
   "widgets-",
 ];
@@ -24,7 +23,6 @@ const forbiddenEntrySources = [
   "/app/ai/conversation.ts",
   "/app/aipanel/aimessage.tsx",
   "/app/aipanel/waveai-model.tsx",
-  "/app/view/term/inlineai/terminal-ai-controller.tsx",
   "/app/monaco/monaco-react.tsx",
   "/app/view/preview/preview.tsx",
   "/app/view/processviewer/processviewer-view.tsx",

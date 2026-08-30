@@ -61,7 +61,7 @@ func RunChatStep(
 		return nil, nil, nil, err
 	}
 
-	client, err := aiutil.MakeHTTPClient(chatOpts.Config.ProxyURL)
+	client, err := aiutil.MakeHTTPClient(chatOpts.Config.ProxyURL, chatOpts.DisableRedirects)
 	if err != nil {
 		return nil, nil, nil, err
 	}
