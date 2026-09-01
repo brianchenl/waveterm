@@ -25,7 +25,7 @@ on:
             - ready_for_review
     schedule:
         - cron: 0 21 * * *
-    workflow_dispatch: null
+    workflow_dispatch: {}
 
 env:
     GO_VERSION: "1.25.6"
