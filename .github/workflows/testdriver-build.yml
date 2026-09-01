@@ -70,7 +70,7 @@ jobs:
 
             - name: Test PowerShell and CMD inline AI
               run: |
-          go test -v ./pkg/util/shellutil ./pkg/shellexec
+                  go test -v ./pkg/util/shellutil ./pkg/shellexec
                   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
                   npm test -- --run frontend/app/view/term/cmd-edit-buffer.test.ts frontend/app/view/term/terminal-enhance-shortcut.test.ts
                   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

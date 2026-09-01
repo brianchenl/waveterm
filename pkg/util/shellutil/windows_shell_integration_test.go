@@ -7,16 +7,41 @@ package shellutil
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/creack/pty"
 )
+
+const windowsTestSuggestion = `Get-ChildItem "中文目录"`
+
+func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && (strings.EqualFold(os.Args[1], "token") || strings.EqualFold(os.Args[1], "completion")) {
+		os.Exit(0)
+	}
+	if len(os.Args) > 1 && strings.EqualFold(os.Args[1], "ai") {
+		input, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if err := os.WriteFile(os.Getenv("WAVETERM_CAPTURE"), input, 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		_, _ = os.Stdout.WriteString(windowsTestSuggestion)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
 
 func TestCmdStartupEmitsIntegrationMarkersInConPTY(t *testing.T) {
 	waveHome := t.TempDir()
@@ -162,10 +187,15 @@ func TestPowerShellStartupParsesOnWindowsPowerShellAndPwsh(t *testing.T) {
 
 func TestPowerShellInlineAIReceivesUnicodeThroughPSReadLine(t *testing.T) {
 	wshBinDir := t.TempDir()
-	fakeWsh := []byte("@echo off\r\n" +
-		"if /I not \"%~1\"==\"ai\" exit /b 0\r\n" +
-		"powershell.exe -NoLogo -NoProfile -Command \"$s=[Console]::OpenStandardInput(); $m=New-Object IO.MemoryStream; $s.CopyTo($m); [IO.File]::WriteAllBytes($env:WAVETERM_CAPTURE,$m.ToArray()); $b=[Text.Encoding]::UTF8.GetBytes('Get-ChildItem'); $o=[Console]::OpenStandardOutput(); $o.Write($b,0,$b.Length)\"\r\n")
-	if err := os.WriteFile(filepath.Join(wshBinDir, "wsh.cmd"), fakeWsh, 0o600); err != nil {
+	testExecutable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fakeWsh, err := os.ReadFile(testExecutable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wshBinDir, "wsh.exe"), fakeWsh, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	waveHome := t.TempDir()
@@ -245,6 +275,23 @@ func TestPowerShellInlineAIReceivesUnicodeThroughPSReadLine(t *testing.T) {
 					t.Fatalf("%s did not invoke the PSReadLine inline AI binding", executable)
 				}
 				time.Sleep(50 * time.Millisecond)
+			}
+
+			if _, err := ptmx.Write([]byte("\r")); err != nil {
+				t.Fatalf("submitting inline AI replacement in %s: %v", executable, err)
+			}
+			expectedCommand := []byte(base64.StdEncoding.EncodeToString([]byte(windowsTestSuggestion)))
+			commandTimer := time.NewTimer(5 * time.Second)
+			defer commandTimer.Stop()
+			for !bytes.Contains(output, expectedCommand) {
+				select {
+				case chunk := <-outputCh:
+					output = append(output, chunk...)
+				case readErr := <-readErrCh:
+					t.Fatalf("reading %s replacement marker: %v; output=%q", executable, readErr, output)
+				case <-commandTimer.C:
+					t.Fatalf("%s corrupted Unicode AI replacement; output=%q", executable, output)
+				}
 			}
 		})
 	}

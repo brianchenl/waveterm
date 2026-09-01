@@ -20,13 +20,16 @@ function Global:_waveterm_ai {
     [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$buffer, [ref]$cursor)
     if ([string]::IsNullOrWhiteSpace($buffer)) { return }
 
-    $previousOutputEncoding = $OutputEncoding
-    $OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    $previousOutputEncoding = $Global:OutputEncoding
+    $previousConsoleOutputEncoding = [Console]::OutputEncoding
+    $Global:OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    [Console]::OutputEncoding = $Global:OutputEncoding
     try {
         $replacement = $buffer | wsh ai --stdin --shell pwsh
         $aiExitCode = $LASTEXITCODE
     } finally {
-        $OutputEncoding = $previousOutputEncoding
+        $Global:OutputEncoding = $previousOutputEncoding
+        [Console]::OutputEncoding = $previousConsoleOutputEncoding
     }
     if ($aiExitCode -ne 0) {
         [Microsoft.PowerShell.PSConsoleReadLine]::Ding()
