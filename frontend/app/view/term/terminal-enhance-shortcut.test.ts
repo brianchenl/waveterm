@@ -129,11 +129,10 @@ describe("terminal inline enhancement shortcut", () => {
 
         const handled = appHandleKeyDown({
             type: "keydown",
-            key: "a",
-            code: "KeyA",
+            key: "Enter",
+            code: "Enter",
             cmd: true,
             meta: true,
-            shift: true,
         });
 
         expect(handled).toBe(true);
@@ -142,7 +141,7 @@ describe("terminal inline enhancement shortcut", () => {
         expect(document.querySelector("[data-terminal-ai], textarea, .inlineai-tray")).toBeNull();
     });
 
-    it("uses Ctrl+Shift+A on Windows and Linux", () => {
+    it("uses Ctrl+Enter on Windows and Linux", () => {
         harness.isMacOS = false;
         setKeyUtilPlatform("linux");
         registerGlobalKeys();
@@ -153,10 +152,9 @@ describe("terminal inline enhancement shortcut", () => {
 
         const handled = appHandleKeyDown({
             type: "keydown",
-            key: "a",
-            code: "KeyA",
+            key: "Enter",
+            code: "Enter",
             control: true,
-            shift: true,
         });
 
         expect(handled).toBe(true);
@@ -171,11 +169,10 @@ describe("terminal inline enhancement shortcut", () => {
 
         const handled = appHandleKeyDown({
             type: "keydown",
-            key: "a",
-            code: "KeyA",
+            key: "Enter",
+            code: "Enter",
             cmd: true,
             meta: true,
-            shift: true,
         });
 
         expect(handled).toBe(true);
@@ -191,11 +188,10 @@ describe("terminal inline enhancement shortcut", () => {
 
         const handled = appHandleKeyDown({
             type: "keydown",
-            key: "a",
-            code: "KeyA",
+            key: "Enter",
+            code: "Enter",
             cmd: true,
             meta: true,
-            shift: true,
         });
 
         expect(handled).toBe(true);
@@ -210,11 +206,10 @@ describe("terminal inline enhancement shortcut", () => {
 
         const handled = appHandleKeyDown({
             type: "keydown",
-            key: "a",
-            code: "KeyA",
+            key: "Enter",
+            code: "Enter",
             cmd: true,
             meta: true,
-            shift: true,
         });
 
         expect(handled).toBe(true);
@@ -230,14 +225,35 @@ describe("terminal inline enhancement shortcut", () => {
 
         const handled = appHandleKeyDown({
             type: "keydown",
-            key: "a",
-            code: "KeyA",
+            key: "Enter",
+            code: "Enter",
             cmd: true,
             meta: true,
-            shift: true,
         });
 
         expect(handled).toBe(true);
+        expect(sendDataToController).not.toHaveBeenCalled();
+    });
+
+    it("does not reserve the previous Ctrl+Shift+A shortcut", () => {
+        harness.isMacOS = false;
+        setKeyUtilPlatform("win32");
+        registerGlobalKeys();
+        const sendDataToController = vi.fn();
+        harness.blockComponentModel = {
+            viewModel: makeTerminalModel(sendDataToController),
+        } as unknown as BlockComponentModel;
+        Object.defineProperty(document, "activeElement", { value: null, configurable: true });
+
+        const handled = appHandleKeyDown({
+            type: "keydown",
+            key: "a",
+            code: "KeyA",
+            control: true,
+            shift: true,
+        });
+
+        expect(handled).toBe(false);
         expect(sendDataToController).not.toHaveBeenCalled();
     });
 });

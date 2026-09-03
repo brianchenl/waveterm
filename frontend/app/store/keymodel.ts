@@ -651,7 +651,7 @@ function registerGlobalKeys() {
         sendTerminalEnhancementShortcut();
         return true;
     };
-    globalKeyMap.set(isMacOS() ? "Cmd:Shift:a" : "Ctrl:Shift:a", enhanceCurrentCommand);
+    globalKeyMap.set(isMacOS() ? "Cmd:Enter" : "Ctrl:Enter", enhanceCurrentCommand);
     const allKeys = Array.from(globalKeyMap.keys());
     // special case keys, handled by web view
     allKeys.push("Cmd:l", "Cmd:r", "Cmd:ArrowRight", "Cmd:ArrowLeft", "Cmd:o");
