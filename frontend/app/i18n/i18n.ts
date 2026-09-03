@@ -140,7 +140,28 @@ const zhCN: Record<string, string> = {
     "Edit widgets.json": "编辑 widgets.json",
     "No local apps found": "未找到本地应用",
     Apps: "应用",
-    "Toggle Wave AI Panel": "显示或隐藏 Wave AI 面板",
+    "Command-line enhancement": "命令行增强",
+    "Type your intent at the command line, then press the shortcut to enhance it in place. Nothing runs automatically.":
+        "在命令行输入意图后按快捷键原位增强，不自动执行。",
+    "Enter a plain-language intent in a focused terminal.": "在聚焦的终端中输入自然语言意图。",
+    "Press {{shortcut}} to enhance the current command line in place.": "按 {{shortcut}} 原位增强当前命令行。",
+    "Nothing runs automatically. Review the enhanced command, then execute it yourself.":
+        "不会自动执行。请先检查增强后的命令，再自行执行。",
+    Intent: "意图",
+    "find the largest files changed this week": "查找本周改动过的最大文件",
+    "Enhanced command · review before running": "增强后的命令 · 运行前请检查",
+    Ready: "就绪",
+    Thinking: "思考中",
+    Responding: "回答中",
+    "Needs attention": "需要处理",
+    "Context on": "上下文已开启",
+    "Context off": "上下文已关闭",
+    Responses: "回答",
+    "Ask AI": "询问 AI",
+    Stop: "停止",
+    Retry: "重试",
+    Send: "发送",
+    "Unable to load": "加载失败",
     "Workspace Switcher": "工作区切换器",
     "New Chat": "新对话",
     "Max Output Tokens": "最大输出 Token 数",
@@ -197,8 +218,6 @@ const zhCN: Record<string, string> = {
     "Close Block": "关闭区块",
     "Copy BlockId": "复制区块 ID",
     "Block Settings": "区块设置",
-    "Open Wave AI Panel": "打开 Wave AI 面板",
-    "Focus Wave AI": "聚焦 Wave AI",
     "Loading…": "正在加载…",
     "The WaveApp builder helps create wave widgets that integrate seamlessly into Wave Terminal.":
         "WaveApp 构建器可帮助你创建与 Wave Terminal 无缝集成的组件。",
@@ -283,11 +302,6 @@ const zhCN: Record<string, string> = {
     "Buffered output streams back in, never miss a line": "缓存的输出会自动回流，不会遗漏任何一行",
     "All the persistence of tmux, built into your terminal. Look for the shield icon to enable durability on any SSH session.":
         "无需额外配置 tmux 即可获得持久化能力；在 SSH 会话中点击盾牌图标即可启用。",
-    "Wave AI is your terminal assistant with context. I can read your terminal output, analyze widgets, read/write files, and help you solve problems faster.":
-        "Wave AI 是理解上下文的终端助手，可以读取终端输出、分析组件、读写文件，帮助你更快解决问题。",
-    "Toggle the Wave AI panel with the AI button in the header (top left)":
-        "使用窗口左上方的 AI 按钮显示或隐藏 Wave AI 面板",
-    "Or use the keyboard shortcut {{shortcut}} to quickly toggle": "也可以使用快捷键 {{shortcut}} 快速切换",
     "Bring your own API keys or run local models with Ollama, LM Studio, and other OpenAI-compatible providers":
         "使用自己的 API 密钥，或通过 Ollama、LM Studio 及其他 OpenAI 兼容服务运行本地模型",
     "Magnify any block to focus on what matters. Expand terminals, editors, and previews for a better view.":

@@ -9,6 +9,19 @@ set -e WAVETERM_SWAPTOKEN
 # Load Wave completions
 wsh completion fish | source
 
+function _waveterm_ai
+    set -l buffer (commandline)
+    test -z "$buffer"; and return
+
+    set -l replacement (printf '%s' "$buffer" | wsh ai --stdin --shell fish)
+    set -l ai_status $status
+    test $ai_status -eq 0; or return
+
+    commandline --replace -- "$replacement"
+    commandline --cursor (string length -- "$replacement")
+end
+bind \e\[24\;2~ _waveterm_ai
+
 set -g _WAVETERM_SI_FIRSTPROMPT 1
 
 # shell integration

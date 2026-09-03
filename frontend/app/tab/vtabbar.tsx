@@ -1,7 +1,6 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { preloadAIPanel } from "@/app/aipanel/aipanel-loader";
 import { Tooltip } from "@/app/element/tooltip";
 import { useTranslation } from "@/app/i18n/use-i18n";
 import { getTabBadgeAtom } from "@/app/store/badge";
@@ -9,7 +8,6 @@ import { getTabModelByTabId } from "@/app/store/tab-model";
 import { makeORef } from "@/app/store/wos";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { useWaveEnv } from "@/app/waveenv/waveenv";
-import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { validateCssColor } from "@/util/color-validator";
 import { cn, fireAndForget } from "@/util/util";
 import { useAtomValue } from "jotai";
@@ -20,37 +18,6 @@ import { VTab, VTabItem } from "./vtab";
 import { VTabBarEnv } from "./vtabbarenv";
 import { WorkspaceSwitcher } from "./workspaceswitcher";
 export type { VTabItem } from "./vtab";
-
-const VTabBarAIButton = memo(() => {
-    const { t } = useTranslation();
-    const env = useWaveEnv<VTabBarEnv>();
-    const aiPanelOpen = useAtomValue(WorkspaceLayoutModel.getInstance().panelVisibleAtom);
-    const hideAiButton = useAtomValue(env.getSettingsKeyAtom("app:hideaibutton"));
-
-    const onClick = () => {
-        const currentVisible = WorkspaceLayoutModel.getInstance().getAIPanelVisible();
-        WorkspaceLayoutModel.getInstance().setAIPanelVisible(!currentVisible);
-    };
-
-    if (hideAiButton) {
-        return null;
-    }
-
-    return (
-        <Tooltip
-            content={t("Toggle Wave AI Panel")}
-            placement="bottom"
-            hideOnClick
-            divClassName={`flex h-[22px] px-3.5 justify-end mb-1 items-center rounded-md mr-1 box-border cursor-pointer bg-hover hover:bg-hoverbg transition-colors text-[12px] ${aiPanelOpen ? "text-accent" : "text-secondary"}`}
-            divStyle={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-            divOnClick={onClick}
-            divOnPointerEnter={() => void preloadAIPanel().catch((error) => console.error("AI preload failed", error))}
-        >
-            <i className="fa fa-sparkles" />
-        </Tooltip>
-    );
-});
-VTabBarAIButton.displayName = "VTabBarAIButton";
 
 const MacOSHeader = memo(() => {
     const { t } = useTranslation();
@@ -73,7 +40,6 @@ const MacOSHeader = memo(() => {
                 className="flex shrink-0 flex-row flex-wrap items-end px-1 pb-1 pl-2"
                 style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
             >
-                <VTabBarAIButton />
                 <Tooltip
                     content={t("Workspace Switcher")}
                     placement="bottom"

@@ -110,9 +110,10 @@ interface AIMessagePartProps {
     part: WaveUIMessagePart;
     role: string;
     isStreaming: boolean;
+    onInsertCode?: (code: string) => void;
 }
 
-const AIMessagePart = memo(({ part, role, isStreaming }: AIMessagePartProps) => {
+const AIMessagePart = memo(({ part, role, isStreaming, onInsertCode }: AIMessagePartProps) => {
     const model = WaveAIModel.getInstance();
 
     if (part.type === "text") {
@@ -126,6 +127,7 @@ const AIMessagePart = memo(({ part, role, isStreaming }: AIMessagePartProps) => 
                     text={content}
                     parseIncompleteMarkdown={isStreaming}
                     className="text-gray-100"
+                    onClickExecute={onInsertCode}
                     codeBlockMaxWidthAtom={model.codeBlockMaxWidth}
                 />
             );
@@ -140,6 +142,9 @@ AIMessagePart.displayName = "AIMessagePart";
 interface AIMessageProps {
     message: WaveUIMessage;
     isStreaming: boolean;
+    onInsertCode?: (code: string) => void;
+    showFeedback?: boolean;
+    allowGlobalChatActions?: boolean;
 }
 
 const isDisplayPart = (part: WaveUIMessagePart): boolean => {
@@ -210,64 +215,76 @@ const getThinkingMessage = (
     return { message: "" };
 };
 
-export const AIMessage = memo(({ message, isStreaming }: AIMessageProps) => {
-    const { t } = useTranslation();
-    const parts = message.parts || [];
-    const displayParts = parts.filter(isDisplayPart);
-    const fileParts = parts.filter(
-        (part): part is WaveUIMessagePart & { type: "data-userfile" } => part.type === "data-userfile"
-    );
+export const AIMessage = memo(
+    ({ message, isStreaming, onInsertCode, showFeedback = true, allowGlobalChatActions = true }: AIMessageProps) => {
+        const { t } = useTranslation();
+        const parts = message.parts || [];
+        const displayParts = parts.filter(isDisplayPart);
+        const fileParts = parts.filter(
+            (part): part is WaveUIMessagePart & { type: "data-userfile" } => part.type === "data-userfile"
+        );
 
-    const thinkingData = getThinkingMessage(parts, isStreaming, message.role, t);
-    const groupedParts = groupMessageParts(displayParts);
+        const thinkingData = getThinkingMessage(parts, isStreaming, message.role, t);
+        const groupedParts = groupMessageParts(displayParts);
 
-    return (
-        <div className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
-            <div
-                className={cn(
-                    "px-2 rounded-lg [&>*:first-child]:!mt-0",
-                    message.role === "user"
-                        ? "py-2 bg-zinc-700/60 text-white max-w-[calc(100%-50px)]"
-                        : "min-w-[min(100%,500px)]"
-                )}
-            >
-                {displayParts.length === 0 && !isStreaming && !thinkingData ? (
-                    <div className="whitespace-pre-wrap break-words">(no text content)</div>
-                ) : (
-                    <>
-                        {groupedParts.map((group, index: number) =>
-                            group.type === "toolgroup" ? (
-                                <AIToolUseGroup key={index} parts={group.parts} isStreaming={isStreaming} />
-                            ) : (
-                                <div key={index} className="mt-2">
-                                    <AIMessagePart part={group.part} role={message.role} isStreaming={isStreaming} />
+        return (
+            <div className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
+                <div
+                    className={cn(
+                        "px-2 rounded-lg [&>*:first-child]:!mt-0",
+                        message.role === "user"
+                            ? "py-2 bg-zinc-700/60 text-white max-w-[calc(100%-50px)]"
+                            : "min-w-[min(100%,500px)]"
+                    )}
+                >
+                    {displayParts.length === 0 && !isStreaming && !thinkingData ? (
+                        <div className="whitespace-pre-wrap break-words">(no text content)</div>
+                    ) : (
+                        <>
+                            {groupedParts.map((group, index: number) =>
+                                group.type === "toolgroup" ? (
+                                    <AIToolUseGroup
+                                        key={index}
+                                        parts={group.parts}
+                                        isStreaming={isStreaming}
+                                        allowGlobalChatActions={allowGlobalChatActions}
+                                    />
+                                ) : (
+                                    <div key={index} className="mt-2">
+                                        <AIMessagePart
+                                            part={group.part}
+                                            role={message.role}
+                                            isStreaming={isStreaming}
+                                            onInsertCode={onInsertCode}
+                                        />
+                                    </div>
+                                )
+                            )}
+                            {thinkingData != null && (
+                                <div className="mt-2">
+                                    <AIThinking
+                                        message={thinkingData.message}
+                                        reasoningText={thinkingData.reasoningText}
+                                        isWaitingApproval={thinkingData.isWaitingApproval}
+                                    />
                                 </div>
-                            )
-                        )}
-                        {thinkingData != null && (
-                            <div className="mt-2">
-                                <AIThinking
-                                    message={thinkingData.message}
-                                    reasoningText={thinkingData.reasoningText}
-                                    isWaitingApproval={thinkingData.isWaitingApproval}
-                                />
-                            </div>
-                        )}
-                    </>
-                )}
+                            )}
+                        </>
+                    )}
 
-                {message.role === "user" && <UserMessageFiles fileParts={fileParts} />}
-                {message.role === "assistant" && !isStreaming && displayParts.length > 0 && (
-                    <AIFeedbackButtons
-                        messageText={parts
-                            .filter((p) => p.type === "text")
-                            .map((p) => p.text || "")
-                            .join("\n\n")}
-                    />
-                )}
+                    {message.role === "user" && <UserMessageFiles fileParts={fileParts} />}
+                    {showFeedback && message.role === "assistant" && !isStreaming && displayParts.length > 0 && (
+                        <AIFeedbackButtons
+                            messageText={parts
+                                .filter((p) => p.type === "text")
+                                .map((p) => p.text || "")
+                                .join("\n\n")}
+                        />
+                    )}
+                </div>
             </div>
-        </div>
-    );
-});
+        );
+    }
+);
 
 AIMessage.displayName = "AIMessage";

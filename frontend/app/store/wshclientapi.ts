@@ -936,6 +936,12 @@ export class RpcApiType {
         return client.wshRpcCall("termgetscrollbacklines", data, opts);
     }
 
+    // command "terminalcommandsuggest" [call]
+    TerminalCommandSuggestCommand(client: WshClient, data: CommandTerminalCommandSuggestData, opts?: RpcOpts): Promise<string> {
+        if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "terminalcommandsuggest", data, opts);
+        return client.wshRpcCall("terminalcommandsuggest", data, opts);
+    }
+
     // command "test" [call]
     TestCommand(client: WshClient, data: string, opts?: RpcOpts): Promise<void> {
         if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "test", data, opts);
@@ -988,12 +994,6 @@ export class RpcApiType {
     WaitForRouteCommand(client: WshClient, data: CommandWaitForRouteData, opts?: RpcOpts): Promise<boolean> {
         if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "waitforroute", data, opts);
         return client.wshRpcCall("waitforroute", data, opts);
-    }
-
-    // command "waveaiaddcontext" [call]
-    WaveAIAddContextCommand(client: WshClient, data: CommandWaveAIAddContextData, opts?: RpcOpts): Promise<void> {
-        if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "waveaiaddcontext", data, opts);
-        return client.wshRpcCall("waveaiaddcontext", data, opts);
     }
 
     // command "waveaienabletelemetry" [call]

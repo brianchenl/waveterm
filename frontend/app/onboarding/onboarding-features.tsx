@@ -9,9 +9,8 @@ import { ClientModel } from "@/app/store/client-model";
 import * as WOS from "@/app/store/wos";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { isMacOS } from "@/util/platformutil";
+import { isMacOS, isWindows } from "@/util/platformutil";
 import { useEffect, useState } from "react";
-import { FakeChat } from "./fakechat";
 import { EditBashrcCommand, ViewLogoCommand, ViewShortcutsCommand } from "./onboarding-command";
 import { CurrentOnboardingVersion } from "./onboarding-common";
 import { DurableSessionPage } from "./onboarding-durable";
@@ -23,7 +22,7 @@ type FeaturePageName = "waveai" | "durable" | "magnify" | "files";
 export const WaveAIPage = ({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) => {
     const { t } = useTranslation();
     const isMac = isMacOS();
-    const shortcutKey = isMac ? "⌘-Shift-A" : "Alt-Shift-A";
+    const shortcutKey = isMac ? "⌘-Shift-A" : isWindows() ? "Alt-0" : "Ctrl-Shift-0";
     const [fireClicked, setFireClicked] = useState(false);
 
     const handleFireClick = () => {
@@ -45,40 +44,43 @@ export const WaveAIPage = ({ onNext, onSkip }: { onNext: () => void; onSkip: () 
                 <div>
                     <Logo />
                 </div>
-                <div className="text-[25px] font-normal text-foreground">Wave AI</div>
+                <div className="text-[25px] font-normal text-foreground">{t("Command-line enhancement")}</div>
             </header>
             <div className="flex-1 flex flex-row gap-0 min-h-0">
                 <div className="flex-1 flex flex-col items-center justify-center gap-8 pr-6 unselectable">
                     <div className="flex flex-col items-start gap-6 max-w-md">
                         <div className="flex h-[52px] px-3 items-center rounded-lg bg-hover text-accent text-[24px]">
-                            <i className="fa fa-sparkles" />
-                            <span className="font-bold ml-2 font-mono">AI</span>
+                            <i className="fa fa-wand-magic-sparkles" />
+                            <span className="font-bold ml-2 font-mono">{shortcutKey}</span>
                         </div>
 
                         <div className="flex flex-col items-start gap-4 text-secondary">
                             <p>
                                 {t(
-                                    "Wave AI is your terminal assistant with context. I can read your terminal output, analyze widgets, read/write files, and help you solve problems faster."
+                                    "Type your intent at the command line, then press the shortcut to enhance it in place. Nothing runs automatically."
                                 )}
                             </p>
 
                             <div className="flex items-start gap-3 w-full">
-                                <i className="fa fa-sparkles text-accent text-lg mt-1 flex-shrink-0" />
-                                <p>
-                                    {t("Toggle the Wave AI panel with the AI button in the header (top left)")}{" "}
-                                    <span className="inline-flex h-[26px] px-1.5 items-center rounded-md box-border bg-hover text-accent text-[12px] align-middle">
-                                        <i className="fa fa-sparkles" />
-                                        <span className="font-bold ml-1 font-mono">AI</span>
-                                    </span>{" "}
-                                </p>
+                                <i className="fa fa-terminal text-accent text-lg mt-1 flex-shrink-0" />
+                                <p>{t("Enter a plain-language intent in a focused terminal.")}</p>
                             </div>
 
                             <div className="flex items-start gap-3 w-full">
                                 <i className="fa fa-keyboard text-accent text-lg mt-1 flex-shrink-0" />
                                 <p>
-                                    {t("Or use the keyboard shortcut {{shortcut}} to quickly toggle", {
+                                    {t("Press {{shortcut}} to enhance the current command line in place.", {
                                         shortcut: shortcutKey,
                                     })}
+                                </p>
+                            </div>
+
+                            <div className="flex items-start gap-3 w-full">
+                                <i className="fa fa-shield-check text-accent text-lg mt-1 flex-shrink-0" />
+                                <p>
+                                    {t(
+                                        "Nothing runs automatically. Review the enhanced command, then execute it yourself."
+                                    )}
                                 </p>
                             </div>
 
@@ -97,8 +99,25 @@ export const WaveAIPage = ({ onNext, onSkip }: { onNext: () => void; onSkip: () 
                 </div>
                 <div className="w-[2px] bg-border flex-shrink-0"></div>
                 <div className="flex items-center justify-center pl-6 flex-shrink-0 w-[400px]">
-                    <div className="w-full h-[400px] bg-background rounded border border-border/50 overflow-hidden">
-                        <FakeChat />
+                    <div className="flex h-[400px] w-full flex-col overflow-hidden rounded border border-border/50 bg-black font-mono text-[12px]">
+                        <div className="border-b border-border/50 px-3 py-2 text-secondary">~/wave-project</div>
+                        <div className="flex-1 space-y-2 px-3 py-3 text-foreground">
+                            <div className="text-secondary">{t("Intent")}</div>
+                            <div>
+                                <span className="text-success">$</span> {t("find the largest files changed this week")}
+                            </div>
+                            <div className="pt-3 text-secondary">{shortcutKey}</div>
+                        </div>
+                        <div className="border-t border-border bg-background text-foreground">
+                            <div className="px-3 py-3">
+                                <div className="mb-2 text-secondary">
+                                    {t("Enhanced command · review before running")}
+                                </div>
+                                <div className="rounded border border-border bg-hover px-3 py-2 text-foreground">
+                                    find . -type f -mtime -7 -print0 | xargs -0 du -h | sort -hr | head
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -1304,6 +1304,13 @@ func (ws *WshServer) GetWaveAIRateLimitCommand(ctx context.Context) (*uctypes.Ra
 	return aiusechat.GetGlobalRateLimit(), nil
 }
 
+func (ws *WshServer) TerminalCommandSuggestCommand(ctx context.Context, data wshrpc.CommandTerminalCommandSuggestData) (string, error) {
+	if strings.TrimSpace(data.Command) == "" {
+		return "", fmt.Errorf("terminal command input is empty")
+	}
+	return aiusechat.TerminalCommandSuggest(ctx, data.Command, data.Cwd, data.Shell)
+}
+
 func (ws *WshServer) WaveAIToolApproveCommand(ctx context.Context, data wshrpc.CommandWaveAIToolApproveData) error {
 	return aiusechat.UpdateToolApproval(data.ToolCallId, data.Approval)
 }

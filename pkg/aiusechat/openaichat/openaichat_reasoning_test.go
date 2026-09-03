@@ -40,6 +40,31 @@ func TestBuildChatHTTPRequestIncludesThinkingParameters(t *testing.T) {
 	}
 }
 
+func TestBuildChatHTTPRequestDisablesProviderStore(t *testing.T) {
+	req, err := buildChatHTTPRequest(context.Background(), []ChatRequestMessage{{Role: "user", Content: "hello"}}, uctypes.WaveChatOpts{
+		Config: uctypes.AIOptsType{
+			Provider: uctypes.AIProvider_Custom,
+			APIType:  uctypes.APIType_OpenAIChat,
+			Model:    "local-model",
+			Endpoint: "http://127.0.0.1:11434/v1/chat/completions",
+			APIToken: "ollama",
+		},
+		DisableProviderStore: true,
+	})
+	if err != nil {
+		t.Fatalf("buildChatHTTPRequest returned error: %v", err)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+		t.Fatalf("decode request body: %v", err)
+	}
+	store, ok := body["store"].(bool)
+	if !ok || store {
+		t.Fatalf("expected store=false, got %#v", body["store"])
+	}
+}
+
 func TestBuildChatHTTPRequestIdentifiesWaveForKimiCode(t *testing.T) {
 	req, err := buildChatHTTPRequest(context.Background(), []ChatRequestMessage{{Role: "user", Content: "hello"}}, uctypes.WaveChatOpts{
 		Config: uctypes.AIOptsType{

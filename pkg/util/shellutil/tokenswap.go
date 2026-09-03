@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -132,6 +133,31 @@ func encodeEnvVarsForPowerShell(env map[string]string) (string, error) {
 	return encoded, nil
 }
 
+func encodeEnvVarsForCmd(env map[string]string) (string, error) {
+	var encoded string
+	replacer := strings.NewReplacer(
+		"^", "^^",
+		"%", "%%",
+		"&", "^&",
+		"|", "^|",
+		"<", "^<",
+		">", "^>",
+		"(", "^(",
+		")", "^)",
+		`"`, `^"`,
+	)
+	for k, v := range env {
+		if !IsValidEnvVarName(k) {
+			return "", fmt.Errorf("invalid env var name: %q", k)
+		}
+		if strings.ContainsAny(v, "\r\n\x00") {
+			return "", fmt.Errorf("CMD environment variable %q contains a line break or NUL", k)
+		}
+		encoded += fmt.Sprintf("set %s=%s\r\n", k, replacer.Replace(v))
+	}
+	return encoded, nil
+}
+
 func EncodeEnvVarsForShell(shellType string, env map[string]string) (string, error) {
 	switch shellType {
 	case ShellType_bash, ShellType_zsh:
@@ -140,6 +166,8 @@ func EncodeEnvVarsForShell(shellType string, env map[string]string) (string, err
 		return encodeEnvVarsForFish(env)
 	case ShellType_pwsh:
 		return encodeEnvVarsForPowerShell(env)
+	case ShellType_cmd:
+		return encodeEnvVarsForCmd(env)
 	default:
 		return "", fmt.Errorf("unknown or unsupported shell type for env var encoding: %s", shellType)
 	}

@@ -11,7 +11,6 @@ const maxInitialCssBytes = 210_000;
 const forbiddenAssetPrefixes = ["ts.worker-"];
 const maxLazyChunkBytes = new Map([["sysinfo-view-", 30_000]]);
 const requiredLazyChunkPrefixes = [
-  "aipanel-",
   "builder-app-",
   "monaco-react-",
   "preview-",
@@ -21,7 +20,9 @@ const requiredLazyChunkPrefixes = [
   "widgets-",
 ];
 const forbiddenEntrySources = [
-  "/app/aipanel/aipanel.tsx",
+  "/app/ai/conversation.ts",
+  "/app/aipanel/aimessage.tsx",
+  "/app/aipanel/waveai-model.tsx",
   "/app/monaco/monaco-react.tsx",
   "/app/view/preview/preview.tsx",
   "/app/view/processviewer/processviewer-view.tsx",

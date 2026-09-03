@@ -51,6 +51,9 @@ var (
 	//go:embed shellintegration/pwsh_wavepwsh.sh
 	PwshStartup_wavepwsh string
 
+	//go:embed shellintegration/cmd_wavecmd.cmd
+	CmdStartup_Wavecmd string
+
 	ZshExtendedHistoryPattern = regexp.MustCompile(`^: [0-9]+:`)
 )
 
@@ -71,6 +74,7 @@ const (
 	ShellType_zsh     = "zsh"
 	ShellType_fish    = "fish"
 	ShellType_pwsh    = "pwsh"
+	ShellType_cmd     = "cmd"
 	ShellType_unknown = "unknown"
 )
 
@@ -79,6 +83,7 @@ const (
 	ZshIntegrationDir  = "shell/zsh"
 	BashIntegrationDir = "shell/bash"
 	PwshIntegrationDir = "shell/pwsh"
+	CmdIntegrationDir  = "shell/cmd"
 	FishIntegrationDir = "shell/fish"
 	WaveHomeBinDir     = "bin"
 	ZshHistoryFileName = ".zsh_history"
@@ -290,6 +295,10 @@ func GetLocalWavePowershellEnv() string {
 	return filepath.Join(wavebase.GetWaveDataDir(), PwshIntegrationDir, "wavepwsh.ps1")
 }
 
+func GetLocalWaveCmdEnv() string {
+	return filepath.Join(wavebase.GetWaveDataDir(), CmdIntegrationDir, "wavecmd.cmd")
+}
+
 func GetLocalZshZDotDir() string {
 	return filepath.Join(wavebase.GetWaveDataDir(), ZshIntegrationDir)
 }
@@ -376,6 +385,11 @@ func InitRcFiles(waveHome string, absWshBinDir string) error {
 	if err != nil {
 		return err
 	}
+	cmdDir := filepath.Join(waveHome, CmdIntegrationDir)
+	err = wavebase.CacheEnsureDir(cmdDir, CmdIntegrationDir, 0755, CmdIntegrationDir)
+	if err != nil {
+		return err
+	}
 
 	var pathSep string
 	if runtime.GOOS == "windows" {
@@ -386,6 +400,7 @@ func InitRcFiles(waveHome string, absWshBinDir string) error {
 	params := map[string]string{
 		"WSHBINDIR":      HardQuote(absWshBinDir),
 		"WSHBINDIR_PWSH": HardQuotePowerShell(absWshBinDir),
+		"WSHBINDIR_CMD":  absWshBinDir,
 		"PATHSEP":        pathSep,
 	}
 
@@ -421,6 +436,11 @@ func InitRcFiles(waveHome string, absWshBinDir string) error {
 	err = utilfn.WriteTemplateToFile(filepath.Join(pwshDir, "wavepwsh.ps1"), PwshStartup_wavepwsh, params)
 	if err != nil {
 		return fmt.Errorf("error writing pwsh-integration wavepwsh.ps1: %v", err)
+	}
+	cmdStartup := strings.ReplaceAll(strings.ReplaceAll(CmdStartup_Wavecmd, "\r\n", "\n"), "\n", "\r\n")
+	err = utilfn.WriteTemplateToFile(filepath.Join(cmdDir, "wavecmd.cmd"), cmdStartup, params)
+	if err != nil {
+		return fmt.Errorf("error writing cmd-integration wavecmd.cmd: %v", err)
 	}
 
 	return nil
@@ -463,7 +483,7 @@ func initCustomShellStartupFilesInternal() error {
 }
 
 func GetShellTypeFromShellPath(shellPath string) string {
-	shellBase := filepath.Base(shellPath)
+	shellBase := strings.ToLower(filepath.Base(shellPath))
 	if strings.Contains(shellBase, "bash") {
 		return ShellType_bash
 	}
@@ -475,6 +495,9 @@ func GetShellTypeFromShellPath(shellPath string) string {
 	}
 	if strings.Contains(shellBase, "pwsh") || strings.Contains(shellBase, "powershell") {
 		return ShellType_pwsh
+	}
+	if shellBase == "cmd" || shellBase == "cmd.exe" {
+		return ShellType_cmd
 	}
 	return ShellType_unknown
 }

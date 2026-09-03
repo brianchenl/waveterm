@@ -23,6 +23,7 @@ type ChatRequest struct {
 	ToolChoice          any                  `json:"tool_choice,omitempty"` // "auto", "none", or struct
 	Thinking            *ThinkingConfig      `json:"thinking,omitempty"`
 	ReasoningEffort     string               `json:"reasoning_effort,omitempty"`
+	Store               *bool                `json:"store,omitempty"`
 }
 
 type ThinkingConfig struct {

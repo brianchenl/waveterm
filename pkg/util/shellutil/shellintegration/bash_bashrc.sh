@@ -30,6 +30,17 @@ if type _init_completion &>/dev/null; then
   source <(wsh completion bash)
 fi
 
+_waveterm_ai() {
+    local buffer="$READLINE_LINE"
+    [[ -z "$buffer" ]] && return
+
+    local replacement
+    replacement=$(printf '%s' "$buffer" | wsh ai --stdin --shell bash) || return
+    READLINE_LINE="$replacement"
+    READLINE_POINT=${#READLINE_LINE}
+}
+bind -x '"\e[24;2~":_waveterm_ai'
+
 # extdebug breaks bash-preexec semantics; bail out cleanly
 if shopt -q extdebug; then
   # printf 'wave si: disabled (bash extdebug enabled)\n' >&2

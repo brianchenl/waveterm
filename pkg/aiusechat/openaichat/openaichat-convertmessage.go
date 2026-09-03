@@ -104,6 +104,10 @@ func buildChatHTTPRequest(ctx context.Context, messages []ChatRequestMessage, ch
 		Messages: finalMessages,
 		Stream:   true,
 	}
+	if chatOpts.DisableProviderStore {
+		store := false
+		reqBody.Store = &store
+	}
 	if opts.ThinkingType != "" || opts.ThinkingKeep != "" {
 		reqBody.Thinking = &ThinkingConfig{
 			Type: opts.ThinkingType,

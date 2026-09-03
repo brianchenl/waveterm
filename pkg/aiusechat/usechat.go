@@ -32,6 +32,7 @@ import (
 	"github.com/wavetermdev/waveterm/pkg/waveappstore"
 	"github.com/wavetermdev/waveterm/pkg/wavebase"
 	"github.com/wavetermdev/waveterm/pkg/waveobj"
+	"github.com/wavetermdev/waveterm/pkg/wconfig"
 	"github.com/wavetermdev/waveterm/pkg/web/sse"
 	"github.com/wavetermdev/waveterm/pkg/wps"
 	"github.com/wavetermdev/waveterm/pkg/wstore"
@@ -77,16 +78,25 @@ func isLocalEndpoint(endpoint string) bool {
 }
 
 func getWaveAISettings(premium bool, builderMode bool, rtInfo waveobj.ObjRTInfo, aiModeName string) (*uctypes.AIOptsType, error) {
+	aiMode, config, err := resolveAIMode(aiModeName, premium)
+	if err != nil {
+		return nil, err
+	}
+	return getWaveAISettingsFromResolvedMode(aiMode, config, builderMode, rtInfo)
+}
+
+func getWaveAISettingsFromResolvedMode(
+	aiMode string,
+	config *wconfig.AIModeConfigType,
+	builderMode bool,
+	rtInfo waveobj.ObjRTInfo,
+) (*uctypes.AIOptsType, error) {
 	maxTokens := DefaultMaxTokens
 	if builderMode {
 		maxTokens = BuilderMaxTokens
 	}
 	if rtInfo.WaveAIMaxOutputTokens > 0 {
 		maxTokens = rtInfo.WaveAIMaxOutputTokens
-	}
-	aiMode, config, err := resolveAIMode(aiModeName, premium)
-	if err != nil {
-		return nil, err
 	}
 	if config.WaveAICloud && !telemetry.IsTelemetryEnabled() {
 		return nil, fmt.Errorf("Wave AI cloud modes require telemetry to be enabled")

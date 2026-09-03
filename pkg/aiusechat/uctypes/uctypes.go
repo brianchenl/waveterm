@@ -519,6 +519,8 @@ type WaveChatOpts struct {
 	BuilderAppGenerator  func() (string, string, string, error)
 	WidgetAccess         bool
 	AllowNativeWebSearch bool
+	DisableProviderStore bool
+	DisableRedirects     bool
 	BuilderId            string
 	BuilderAppId         string
 

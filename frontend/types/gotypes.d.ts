@@ -5,14 +5,6 @@
 
 declare global {
 
-    // wshrpc.AIAttachedFile
-    type AIAttachedFile = {
-        name: string;
-        type: string;
-        size: number;
-        data64: string;
-    };
-
     // wconfig.AIModeConfigType
     type AIModeConfigType = {
         "display:name": string;
@@ -728,6 +720,13 @@ declare global {
         lastupdated: number;
     };
 
+    // wshrpc.CommandTerminalCommandSuggestData
+    type CommandTerminalCommandSuggestData = {
+        command: string;
+        cwd: string;
+        shell: string;
+    };
+
     // wshrpc.CommandVarData
     type CommandVarData = {
         key: string;
@@ -748,14 +747,6 @@ declare global {
     type CommandWaitForRouteData = {
         routeid: string;
         waitms: number;
-    };
-
-    // wshrpc.CommandWaveAIAddContextData
-    type CommandWaveAIAddContextData = {
-        files?: AIAttachedFile[];
-        text?: string;
-        submit?: boolean;
-        newchat?: boolean;
     };
 
     // wshrpc.CommandWaveAIGetToolDiffData

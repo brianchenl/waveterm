@@ -1,7 +1,6 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { BlockNodeModel } from "@/app/block/blocktypes";
 import { tCurrent } from "@/app/i18n/current-i18n";
 import { appHandleKeyDown } from "@/app/store/keymodel";
@@ -11,10 +10,9 @@ import { waveEventSubscribeSingle } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { makeFeBlockRouteId } from "@/app/store/wshrouter";
 import { DefaultRouter, TabRpcClient } from "@/app/store/wshrpcutil";
-import { TermClaudeIcon, TerminalView } from "@/app/view/term/term";
+import { TerminalView } from "@/app/view/term/term";
 import { TermWshClient } from "@/app/view/term/term-wsh";
 import { VDomModel } from "@/app/view/vdom/vdom-model";
-import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import {
     atoms,
     createBlock,
@@ -40,7 +38,6 @@ import { isMacOS, isWindows } from "@/util/platformutil";
 import { boundNumber, fireAndForget, stringToBase64 } from "@/util/util";
 import * as jotai from "jotai";
 import * as React from "react";
-import { getBlockingCommand } from "./shellblocking";
 import { computeTheme, DefaultTermTheme, isLikelyOnSameHost, trimTerminalSelection } from "./termutil";
 import { TermWrap, WebGLSupported } from "./termwrap";
 
@@ -85,6 +82,7 @@ export class TermViewModel implements ViewModel {
     termDurableStatus: jotai.Atom<BlockJobStatusData | null>;
     termConfigedDurable: jotai.Atom<null | boolean>;
     searchAtoms?: SearchAtoms;
+    private cmdAIEnhancementPending = false;
 
     constructor({ blockId, nodeModel, tabModel }: ViewModelInitType) {
         this.viewType = "term";
@@ -288,14 +286,6 @@ export class TermViewModel implements ViewModel {
             const isCmd = get(this.isCmdController);
             const rtn: IconButtonDecl[] = [];
 
-            const isAIPanelOpen = get(WorkspaceLayoutModel.getInstance().panelVisibleAtom);
-            if (isAIPanelOpen) {
-                const shellIntegrationButton = this.getShellIntegrationIconButton(get);
-                if (shellIntegrationButton) {
-                    rtn.push(shellIntegrationButton);
-                }
-            }
-
             if (get(getSettingsKeyAtom("debug:webglstatus"))) {
                 const webglButton = this.getWebGlIconButton(get);
                 if (webglButton) {
@@ -402,58 +392,6 @@ export class TermViewModel implements ViewModel {
         });
     }
 
-    getShellIntegrationIconButton(get: jotai.Getter): IconButtonDecl | null {
-        if (!this.termRef.current?.shellIntegrationStatusAtom) {
-            return null;
-        }
-        const shellIntegrationStatus = get(this.termRef.current.shellIntegrationStatusAtom);
-        const claudeCodeActive = get(this.termRef.current.claudeCodeActiveAtom);
-        const icon = claudeCodeActive ? React.createElement(TermClaudeIcon) : "sparkles";
-        if (shellIntegrationStatus == null) {
-            return {
-                elemtype: "iconbutton",
-                icon,
-                className: "text-muted",
-                title: tCurrent("No shell integration — Wave AI unable to run commands."),
-                noAction: true,
-            };
-        }
-        if (shellIntegrationStatus === "ready") {
-            return {
-                elemtype: "iconbutton",
-                icon,
-                className: "text-accent",
-                title: tCurrent("Shell ready — Wave AI can run commands in this terminal."),
-                noAction: true,
-            };
-        }
-        if (shellIntegrationStatus === "running-command") {
-            let title = claudeCodeActive
-                ? tCurrent("Claude Code Detected")
-                : tCurrent("Shell busy — Wave AI unable to run commands while another command is running.");
-
-            if (this.termRef.current) {
-                const inAltBuffer = this.termRef.current.terminal?.buffer?.active?.type === "alternate";
-                const lastCommand = get(this.termRef.current.lastCommandAtom);
-                const blockingCmd = getBlockingCommand(lastCommand, inAltBuffer);
-                if (blockingCmd) {
-                    title = tCurrent("Wave AI integration disabled while you're inside {{command}}.", {
-                        command: blockingCmd,
-                    });
-                }
-            }
-
-            return {
-                elemtype: "iconbutton",
-                icon,
-                className: "text-warning",
-                title: title,
-                noAction: true,
-            };
-        }
-        return null;
-    }
-
     getWebGlIconButton(get: jotai.Getter): IconButtonDecl | null {
         if (!WebGLSupported) {
             return {
@@ -502,18 +440,69 @@ export class TermViewModel implements ViewModel {
         return true;
     }
 
+    enhanceCurrentCommand(getFn: jotai.Getter): boolean {
+        if (!this.isBasicTerm(getFn)) {
+            return false;
+        }
+        const termWrap = this.termRef.current;
+        if (
+            termWrap?.shellIntegrationStatusAtom == null ||
+            getFn(termWrap.shellIntegrationStatusAtom) !== "ready" ||
+            termWrap.terminal?.buffer?.active?.type !== "normal" ||
+            !termWrap.hasTerminalFocus()
+        ) {
+            return false;
+        }
+        if (termWrap.isCmdShell()) {
+            if (this.cmdAIEnhancementPending || !termWrap.canEnhanceCmdLine()) {
+                return false;
+            }
+            const cwd = getFn(this.blockAtom)?.meta?.["cmd:cwd"] ?? "";
+            this.cmdAIEnhancementPending = true;
+            void termWrap
+                .enhanceCmdLine(cwd, (request) =>
+                    RpcApi.TerminalCommandSuggestCommand(TabRpcClient, request, { timeout: 120000 })
+                )
+                .then((editSequence) => {
+                    if (
+                        editSequence != null &&
+                        this.termRef.current === termWrap &&
+                        getFn(termWrap.shellIntegrationStatusAtom) === "ready" &&
+                        termWrap.terminal?.buffer?.active?.type === "normal"
+                    ) {
+                        return this.sendDataToController(editSequence).catch((error) => {
+                            termWrap.invalidateCmdLine();
+                            throw error;
+                        });
+                    }
+                })
+                .catch((error) => console.error("Failed to enhance CMD input:", error))
+                .finally(() => {
+                    this.cmdAIEnhancementPending = false;
+                });
+            return true;
+        }
+        void this.sendDataToController("\x1b[24;2~");
+        return true;
+    }
+
     multiInputHandler(data: string) {
         const tvms = getAllBasicTermModels();
         for (const tvm of tvms) {
             if (tvm != this) {
-                tvm.sendDataToController(data);
+                tvm.sendUserDataToController(data);
             }
         }
     }
 
-    sendDataToController(data: string) {
+    sendDataToController(data: string): Promise<void> {
         const b64data = stringToBase64(data);
-        RpcApi.ControllerInputCommand(TabRpcClient, { blockid: this.blockId, inputdata64: b64data });
+        return RpcApi.ControllerInputCommand(TabRpcClient, { blockid: this.blockId, inputdata64: b64data });
+    }
+
+    sendUserDataToController(data: string): Promise<void> {
+        this.termRef.current?.trackCmdInput(data);
+        return this.sendDataToController(data);
     }
 
     setTermMode(mode: "term" | "vdom") {
@@ -715,13 +704,13 @@ export class TermViewModel implements ViewModel {
 
         if (isMacOS()) {
             if (keyutil.checkKeyPressed(waveEvent, "Cmd:ArrowLeft")) {
-                this.sendDataToController("\x01"); // Ctrl-A (beginning of line)
+                this.sendUserDataToController("\x01"); // Ctrl-A (beginning of line)
                 event.preventDefault();
                 event.stopPropagation();
                 return false;
             }
             if (keyutil.checkKeyPressed(waveEvent, "Cmd:ArrowRight")) {
-                this.sendDataToController("\x05"); // Ctrl-E (end of line)
+                this.sendUserDataToController("\x05"); // Ctrl-E (end of line)
                 event.preventDefault();
                 event.stopPropagation();
                 return false;
@@ -731,7 +720,7 @@ export class TermViewModel implements ViewModel {
             const shiftEnterNewlineAtom = getOverrideConfigAtom(this.blockId, "term:shiftenternewline");
             const shiftEnterNewlineEnabled = globalStore.get(shiftEnterNewlineAtom) ?? true;
             if (shiftEnterNewlineEnabled) {
-                this.sendDataToController("\n");
+                this.sendUserDataToController("\n");
                 event.preventDefault();
                 event.stopPropagation();
                 return false;
@@ -845,22 +834,6 @@ export class TermViewModel implements ViewModel {
                     }
                 },
             });
-            menu.push({ type: "separator" });
-            menu.push({
-                label: tCurrent("Send to Wave AI"),
-                click: () => {
-                    if (selection) {
-                        const aiModel = WaveAIModel.getInstance();
-                        aiModel.appendText(selection, true, { scrollToBottom: true });
-                        const layoutModel = WorkspaceLayoutModel.getInstance();
-                        if (!layoutModel.getAIPanelVisible()) {
-                            layoutModel.setAIPanelVisible(true);
-                        }
-                        aiModel.focusInput();
-                    }
-                },
-            });
-
             menu.push({ type: "separator" });
         }
 

@@ -1,6 +1,7 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { AIConversationHost, useAIConversation, useAIConversationSnapshot } from "@/app/ai/conversation-host";
 import { handleWaveAIContextMenu } from "@/app/aipanel/aipanel-contextmenu";
 import { waveAIHasSelection } from "@/app/aipanel/waveai-focus-utils";
 import { useTabBackground } from "@/app/block/blockutil";
@@ -9,13 +10,10 @@ import { useTranslation } from "@/app/i18n/use-i18n";
 import { atoms, getSettingsKeyAtom } from "@/app/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
 import { useTabModelMaybe } from "@/app/store/tab-model";
-import { isBuilderWindow } from "@/app/store/windowtype";
 import { useWaveEnv } from "@/app/waveenv/waveenv";
 import { checkKeyPressed, keydownWrapper } from "@/util/keyutil";
 import { isMacOS, isWindows } from "@/util/platformutil";
 import { cn } from "@/util/util";
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
 import * as jotai from "jotai";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useDrop } from "react-dnd";
@@ -27,7 +25,6 @@ import { AIPanelHeader } from "./aipanelheader";
 import { AIPanelInput } from "./aipanelinput";
 import { AIPanelMessages } from "./aipanelmessages";
 import { AIRateLimitStrip } from "./airatelimitstrip";
-import { WaveUIMessage } from "./aitypes";
 import { BYOKAnnouncement } from "./byokannouncement";
 import { TelemetryRequiredMessage } from "./telemetryrequired";
 import { WaveAIModel } from "./waveai-model";
@@ -258,11 +255,12 @@ type AIPanelComponentInnerProps = {
     roundTopLeft: boolean;
 };
 
-const AIPanelComponentInner = memo(({ roundTopLeft }: AIPanelComponentInnerProps) => {
+const AIPanelContent = memo(({ roundTopLeft }: AIPanelComponentInnerProps) => {
     const [isDragOver, setIsDragOver] = useState(false);
     const [isReactDndDragOver, setIsReactDndDragOver] = useState(false);
-    const [initialLoadDone, setInitialLoadDone] = useState(false);
     const model = WaveAIModel.getInstance();
+    const conversation = useAIConversation();
+    const { messages, status, historyLoaded } = useAIConversationSnapshot();
     const containerRef = useRef<HTMLDivElement>(null);
     const waveEnv = useWaveEnv();
     const isLayoutMode = jotai.useAtomValue(atoms.controlShiftDelayAtom);
@@ -280,34 +278,6 @@ const AIPanelComponentInner = memo(({ roundTopLeft }: AIPanelComponentInnerProps
     const isUsingCustomMode = !defaultMode.startsWith("waveai@");
     const allowAccess = telemetryEnabled || (hasCustomModes && isUsingCustomMode);
 
-    const { messages, sendMessage, status, setMessages, error, stop } = useChat<WaveUIMessage>({
-        transport: new DefaultChatTransport({
-            api: model.getUseChatEndpointUrl(),
-            prepareSendMessagesRequest: (_opts) => {
-                const msg = model.getAndClearMessage();
-                const body: any = {
-                    msg,
-                    chatid: globalStore.get(model.chatId),
-                    widgetaccess: globalStore.get(model.widgetAccessAtom),
-                    aimode: globalStore.get(model.currentAIMode),
-                };
-                if (isBuilderWindow()) {
-                    body.builderid = globalStore.get(atoms.builderId);
-                    body.builderappid = globalStore.get(atoms.builderAppId);
-                } else {
-                    body.tabid = tabModel.tabId;
-                }
-                return { body };
-            },
-        }),
-        onError: (error) => {
-            console.error("AI Chat error:", error);
-            model.setError(error.message || "An error occurred");
-        },
-    });
-
-    model.registerUseChatData(sendMessage, setMessages, status, stop);
-
     useEffect(() => registerAIPanelFocusHandler(() => model.focusInput()), [model]);
 
     // console.log("AICHAT messages", messages);
@@ -323,24 +293,12 @@ const AIPanelComponentInner = memo(({ roundTopLeft }: AIPanelComponentInnerProps
     };
 
     useEffect(() => {
-        globalStore.set(model.isAIStreaming, status === "streaming" || status === "submitted");
-    }, [status]);
-
-    useEffect(() => {
         const keyHandler = keydownWrapper(handleKeyDown);
         document.addEventListener("keydown", keyHandler);
         return () => {
             document.removeEventListener("keydown", keyHandler);
         };
     }, []);
-
-    useEffect(() => {
-        const loadChat = async () => {
-            await model.uiLoadInitialChat();
-            setInitialLoadDone(true);
-        };
-        loadChat();
-    }, [model]);
 
     useEffect(() => {
         const updateWidth = () => {
@@ -367,7 +325,10 @@ const AIPanelComponentInner = memo(({ roundTopLeft }: AIPanelComponentInnerProps
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        await model.handleSubmit();
+        const result = await conversation.send({ text: globalStore.get(model.inputAtom) });
+        if (result !== "ignored") {
+            globalStore.set(model.inputAtom, "");
+        }
         setTimeout(() => {
             model.focusInput();
         }, 100);
@@ -599,7 +560,7 @@ const AIPanelComponentInner = memo(({ roundTopLeft }: AIPanelComponentInnerProps
                     <TelemetryRequiredMessage />
                 ) : (
                     <>
-                        {messages.length === 0 && initialLoadDone ? (
+                        {messages.length === 0 && historyLoaded ? (
                             <div
                                 className="flex-1 overflow-y-auto p-2 relative"
                                 onContextMenu={(e) => handleWaveAIContextMenu(e, true)}
@@ -623,6 +584,17 @@ const AIPanelComponentInner = memo(({ roundTopLeft }: AIPanelComponentInnerProps
                 )}
             </div>
         </div>
+    );
+});
+
+AIPanelContent.displayName = "AIPanelContent";
+
+const AIPanelComponentInner = memo(({ roundTopLeft }: AIPanelComponentInnerProps) => {
+    const model = WaveAIModel.getInstance();
+    return (
+        <AIConversationHost conversation={model.conversation}>
+            <AIPanelContent roundTopLeft={roundTopLeft} />
+        </AIConversationHost>
     );
 });
 
